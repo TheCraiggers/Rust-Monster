@@ -60,9 +60,8 @@ async fn handle_event(
     //Create the commands the bot will listen for
     let mut config = CommandParserConfig::new();
     config.add_prefix("!");
-    config.add_prefix("! ");    //For mobile users like me
+    config.add_prefix("! ");    //For mobile users like me. Android puts a space after ! because it's punctuation
     config.add_command("omni", false);
-    config.add_command("ping", false);
     config.add_command("lookup", false);
     let parser = Parser::new(config);
 
@@ -70,6 +69,16 @@ async fn handle_event(
         Event::MessageCreate(msg) => {
             match parser.parse(&msg.content) {
                 Some(Command { name: "omni", arguments, .. }) => {
+                    //Get the bot data from the guild
+                    let guild_channels = http.guild_channels(msg.guild_id.expect("Could not get guild ID!")).await?;
+                    match guild_channels.iter().find(|&channel| channel.name() == "omni-bot-data") {
+                        Some(channel) => {
+                            println!("Found the bot channel!");
+                        }
+                        None => {
+                            println!("No bot channel found!");
+                        }
+                    }
                     http.create_message(msg.channel_id).reply(msg.id).content(format!("omni with args of {}", arguments.as_str()))?.await?;
                 },
                 //Ignore anything that doesn't match the commands above.
