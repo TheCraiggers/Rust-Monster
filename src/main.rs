@@ -7,6 +7,7 @@ use twilight_model::gateway::Intents;
 use twilight_command_parser::{Command, CommandParserConfig, Parser};
 
 mod omni;
+mod setup;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -63,6 +64,7 @@ async fn handle_event(
     config.add_prefix("! ");    //For mobile users like me. Android puts a space after ! because it's punctuation
     config.add_command("omni", false);
     config.add_command("lookup", false);
+    config.add_command("setup", false);
     let parser = Parser::new(config);
 
     match event {
@@ -80,6 +82,10 @@ async fn handle_event(
                         }
                     }
                     http.create_message(msg.channel_id).reply(msg.id).content(format!("omni with args of {}", arguments.as_str()))?.await?;
+                },
+                Some(Command {name: "setup", ..}) => {
+                    //Do setup
+                    setup::setup(http);
                 },
                 //Ignore anything that doesn't match the commands above.
                 Some(_) => {},
