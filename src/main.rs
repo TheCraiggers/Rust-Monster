@@ -3,14 +3,18 @@ use futures::stream::StreamExt;
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 use twilight_gateway::{cluster::{Cluster, ShardScheme}, Event};
 use twilight_http::Client as HttpClient;
-use twilight_model::gateway::Intents;
+use twilight_model::{channel::{GuildChannel, Message, ChannelType::GuildCategory}, gateway::{Intents, payload::MessageCreate}, guild::Guild};
 use twilight_command_parser::{Command, CommandParserConfig, Parser};
-
+use anyhow::{Result, Context};
 mod omni;
+
+const BOT_DATA_CHANNEL_CATEGORY_NAME: &str = "rust-monster-bot-data";
+const BOT_DATA_CHANNEL_NAME: &str = "omni-bot-data";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let token = env::var("DISCORD_TOKEN")?;
+    tracing_subscriber::fmt::init();
 
     // This is the default scheme. It will automatically create as many
     // shards as is suggested by Discord.
@@ -69,18 +73,27 @@ async fn handle_event(
         Event::MessageCreate(msg) => {
             match parser.parse(&msg.content) {
                 Some(Command { name: "omni", arguments, .. }) => {
-                    //Get the bot data from the guild
+                    //Get the bot data from the guild. But first, we need to get the channel, or create it.
                     let guild_channels = http.guild_channels(msg.guild_id.expect("Could not get guild ID!")).await?;
-                    match guild_channels.iter().find(|&channel| channel.name() == "omni-bot-data") {
+                    let bot_data_channel;
+                    let bot_data_message: &Message;
+                    match guild_channels.iter().find(|&channel| channel.name() == BOT_DATA_CHANNEL_NAME) {
                         Some(channel) => {
                             println!("Found the bot channel!");
+                            bot_data_channel = channel;
                         }
                         None => {
-                            println!("No bot channel found!");
+                            println!("No bot channel found! I will create it.");
+                            bot_data_channel = &create_omni_data_channel(&http, &msg, &guild_channels).await?;
+                            println!("Done.");
                         }
                     }
-                    http.create_message(msg.channel_id).reply(msg.id).content(format!("omni with args of {}", arguments.as_str()))?.await?;
+                    //Next, get the messages in that channel and look for the active one.
+                    //Finally, send the command args & the current data message to the omni crate entry point
                 },
+                Some(Command { name: "lookup", arguments, .. }) => {
+                    http.create_message(msg.channel_id).reply(msg.id).content("Lookup command now implemented yet.")?.await?;
+                }
                 //Ignore anything that doesn't match the commands above.
                 Some(_) => {},
                 None => {},
@@ -94,4 +107,40 @@ async fn handle_event(
     }
 
     Ok(())
+}
+
+async fn create_omni_data_channel(http: &HttpClient, msg: &Box<MessageCreate>, guild_channels: &Vec<GuildChannel>) -> Result<GuildChannel> {
+    //Usually we want to make the channel in a category to make things easier for the server owner to manage, so find/make that first.
+    let channel_category;
+    match guild_channels.iter().find(|&channel| channel.name() == BOT_DATA_CHANNEL_CATEGORY_NAME) {
+        Some(category) => {
+            println!("Found bot data channel category!");
+            channel_category = category.clone();
+        }
+        None => {
+            println!("Creating category for bot data.");
+            channel_category = http.create_guild_channel(msg.guild_id.expect("Could not find guild ID when creating bot category!"), BOT_DATA_CHANNEL_CATEGORY_NAME)?
+                .kind(GuildCategory)
+                .position(999)
+                .await
+                .context("Could not create category for bot data channel. Does the bot have the correct permissions?")?;
+        }
+    }
+
+    //Now do it again for the actual channel
+    let bot_data_channel: GuildChannel;
+    match guild_channels.iter().find(|&channel| channel.name() == BOT_DATA_CHANNEL_NAME) {
+        Some(channel) => {
+            println!("Found bot data channel!");
+            bot_data_channel = channel.clone();
+        }
+        None => {
+            println!("Creating channel for bot data.");
+            bot_data_channel = http.create_guild_channel(msg.guild_id.expect("Could not find guild ID when creating bot category!"), BOT_DATA_CHANNEL_NAME)?
+                .parent_id(channel_category.id())
+                .await
+                .context("Could not create channel for bot data. Does the bot have the correct permissions?")?;
+        }
+    }
+    return Ok(bot_data_channel.clone());
 }
