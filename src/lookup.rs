@@ -5,7 +5,7 @@ use twilight_model::channel::embed::{Embed, EmbedField};
 use anyhow::{Result};
 
 pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String) -> Result<(), Box<dyn std::error::Error>> {
-    println!("In lookup function");
+    //Use embed to build the results of the lookup.
     let embed = Embed {
         author: None,
         color: Some(12009742),
@@ -31,7 +31,6 @@ pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String
         url: Some("https://pf2.easytool.es/".to_owned()),
         video: None        
     };
-    println!("Created Embed");
     http.create_message(msg.channel_id).reply(msg.id).embed(embed)?.await?;
     Ok(())
 }
