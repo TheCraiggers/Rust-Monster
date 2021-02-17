@@ -18,11 +18,11 @@
 - Attach Files
 - Read Message History
 
-## Running bot in debug mode
+## Running bot locally
 1. Install the pre-requisites listed above
 2. Clone the repository
     `git clone https://github.com/TheCraiggers/Rust-Monster.git`
 3. Build the project
     `cargo build`
 4. Run the bot in debug mode
-    `DISCORD_TOKEN="<INSERT_DISCORD_TOKEN_HERE>" ./target/debug/rust-monster`
+    `RUST_LOG="debug" DISCORD_TOKEN="<INSERT_DISCORD_TOKEN_HERE>" ./target/debug/rust-monster`
