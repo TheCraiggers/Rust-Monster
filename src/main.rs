@@ -5,12 +5,8 @@ use twilight_gateway::{cluster::{Cluster, ShardScheme}, Event};
 use twilight_http::Client as HttpClient;
 use twilight_model::{channel::{GuildChannel, Message, ChannelType::GuildCategory}, gateway::{Intents, payload::MessageCreate}, guild::Guild};
 use twilight_command_parser::{Command, CommandParserConfig, Parser};
-use anyhow::{Result, Context};
 mod omni;
-mod setup;
 mod lookup;
-
-const BOT_DATA_CHANNEL_NAME: &str = "omni-bot-data"; //This variable and string also exist in setup.rs. If an update is made, it needs to be made there too.
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -78,15 +74,15 @@ async fn handle_event(
                     let guild_channels = http.guild_channels(msg.guild_id.expect("Could not get guild ID!")).await?;
                     let bot_data_channel;
                     let bot_data_message: &Message;
-                    match guild_channels.iter().find(|&channel| channel.name() == BOT_DATA_CHANNEL_NAME) {
+                    match guild_channels.iter().find(|&channel| channel.name() == omni::discord::BOT_DATA_CHANNEL_NAME) {
                         Some(channel) => {
                             println!("Found the bot channel!");
                             bot_data_channel = channel;
                         }
                         None => {
                             //Do setup
-                            &setup::create_omni_data_channel(&http, &msg, &guild_channels).await?;
-                            http.create_message(msg.channel_id).reply(msg.id).content(format!("You are good to go!"))?.await?;
+                            bot_data_channel = &omni::discord::create_omni_data_channel(&http, &msg, &guild_channels).await?;
+                            http.create_message(msg.channel_id).reply(msg.id).content(format!("Bot setup complete."))?.await?;
                         }
                     }
                     //Next, get the messages in that channel and look for the active one.

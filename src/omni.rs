@@ -1,5 +1,6 @@
 mod character;
 use crate::omni::character::Character;
+pub mod discord;
 
 struct Tracker {
     version: u16,
