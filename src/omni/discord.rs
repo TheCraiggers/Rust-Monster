@@ -2,8 +2,8 @@ use twilight_http::Client as HttpClient;
 use twilight_model::{channel::{GuildChannel, ChannelType::GuildCategory}, gateway::{payload::MessageCreate}};
 use anyhow::{Result, Context};
 
-const BOT_DATA_CHANNEL_CATEGORY_NAME: &str = "rust-monster-bot-data";
-const BOT_DATA_CHANNEL_NAME: &str = "omni-bot-data"; //This variable and string also exist in main.rs. If an update is made, it needs to be made there too.
+pub const BOT_DATA_CHANNEL_CATEGORY_NAME: &str = "rust-monster-bot-data";
+pub const BOT_DATA_CHANNEL_NAME: &str = "omni-bot-data"; //This variable and string also exist in main.rs. If an update is made, it needs to be made there too.
 
 pub async fn create_omni_data_channel(http: &HttpClient, msg: &Box<MessageCreate>, guild_channels: &Vec<GuildChannel>) -> Result<GuildChannel> {
     //Usually we want to make the channel in a category to make things easier for the server owner to manage, so find/make that first.
