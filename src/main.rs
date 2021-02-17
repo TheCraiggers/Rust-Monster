@@ -3,15 +3,19 @@ use futures::stream::StreamExt;
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 use twilight_gateway::{cluster::{Cluster, ShardScheme}, Event};
 use twilight_http::Client as HttpClient;
-use twilight_model::gateway::Intents;
+use twilight_model::{channel::{GuildChannel, Message, ChannelType::GuildCategory}, gateway::{Intents, payload::MessageCreate}, guild::Guild};
 use twilight_command_parser::{Command, CommandParserConfig, Parser};
-
+use anyhow::{Result, Context};
 mod omni;
 mod setup;
+mod lookup;
+
+const BOT_DATA_CHANNEL_NAME: &str = "omni-bot-data"; //This variable and string also exist in setup.rs. If an update is made, it needs to be made there too.
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let token = env::var("DISCORD_TOKEN")?;
+    tracing_subscriber::fmt::init();
 
     // This is the default scheme. It will automatically create as many
     // shards as is suggested by Discord.
@@ -64,29 +68,34 @@ async fn handle_event(
     config.add_prefix("! ");    //For mobile users like me. Android puts a space after ! because it's punctuation
     config.add_command("omni", false);
     config.add_command("lookup", false);
-    config.add_command("setup", false);
     let parser = Parser::new(config);
 
     match event {
         Event::MessageCreate(msg) => {
             match parser.parse(&msg.content) {
                 Some(Command { name: "omni", arguments, .. }) => {
-                    //Get the bot data from the guild
+                    //Get the bot data from the guild. But first, we need to get the channel, or create it.
                     let guild_channels = http.guild_channels(msg.guild_id.expect("Could not get guild ID!")).await?;
-                    match guild_channels.iter().find(|&channel| channel.name() == "omni-bot-data") {
+                    let bot_data_channel;
+                    let bot_data_message: &Message;
+                    match guild_channels.iter().find(|&channel| channel.name() == BOT_DATA_CHANNEL_NAME) {
                         Some(channel) => {
                             println!("Found the bot channel!");
+                            bot_data_channel = channel;
                         }
                         None => {
-                            println!("No bot channel found!");
+                            //Do setup
+                            &setup::create_omni_data_channel(&http, &msg, &guild_channels).await?;
+                            http.create_message(msg.channel_id).reply(msg.id).content(format!("You are good to go!"))?.await?;
                         }
                     }
-                    http.create_message(msg.channel_id).reply(msg.id).content(format!("omni with args of {}", arguments.as_str()))?.await?;
+                    //Next, get the messages in that channel and look for the active one.
+                    //Finally, send the command args & the current data message to the omni crate entry point
                 },
-                Some(Command {name: "setup", ..}) => {
-                    //Do setup
-                    setup::setup(http);
-                },
+                Some(Command { name: "lookup", arguments, .. }) => {
+                    println!("In Lookup command");
+                    &lookup::lookup(&http, &msg, arguments.as_str().to_string()).await;
+                }
                 //Ignore anything that doesn't match the commands above.
                 Some(_) => {},
                 None => {},
