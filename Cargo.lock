@@ -944,6 +944,7 @@ dependencies = [
  "tracing-subscriber",
  "twilight-cache-inmemory",
  "twilight-command-parser",
+ "twilight-embed-builder",
  "twilight-gateway",
  "twilight-http",
  "twilight-model",
@@ -1504,6 +1505,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f7b2430c09a2298f61e4e1203398445c54ed5d73c8c05bf4f0dc9b34a8e8212e"
 dependencies = [
  "unicase",
+]
+
+[[package]]
+name = "twilight-embed-builder"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31b53c7675061a6d41ff8ee0f431f44103b10cce6a20f4f54b14b37d4f1c2d8a"
+dependencies = [
+ "twilight-model",
 ]
 
 [[package]]

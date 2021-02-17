@@ -7,6 +7,10 @@ use twilight_model::{channel::{GuildChannel, Message, ChannelType::GuildCategory
 use twilight_command_parser::{Command, CommandParserConfig, Parser};
 use anyhow::{Result, Context};
 mod omni;
+mod setup;
+mod lookup;
+
+const BOT_DATA_CHANNEL_NAME: &str = "omni-bot-data"; //This variable and string also exist in setup.rs. If an update is made, it needs to be made there too.
 
 const BOT_DATA_CHANNEL_CATEGORY_NAME: &str = "rust-monster-bot-data";
 const BOT_DATA_CHANNEL_NAME: &str = "omni-bot-data";
@@ -83,16 +87,17 @@ async fn handle_event(
                             bot_data_channel = channel;
                         }
                         None => {
-                            println!("No bot channel found! I will create it.");
-                            bot_data_channel = &create_omni_data_channel(&http, &msg, &guild_channels).await?;
-                            println!("Done.");
+                            //Do setup
+                            &setup::create_omni_data_channel(&http, &msg, &guild_channels).await?;
+                            http.create_message(msg.channel_id).reply(msg.id).content(format!("You are good to go!"))?.await?;
                         }
                     }
                     //Next, get the messages in that channel and look for the active one.
                     //Finally, send the command args & the current data message to the omni crate entry point
                 },
                 Some(Command { name: "lookup", arguments, .. }) => {
-                    http.create_message(msg.channel_id).reply(msg.id).content("Lookup command now implemented yet.")?.await?;
+                    println!("In Lookup command");
+                    &lookup::lookup(&http, &msg, arguments.as_str().to_string()).await;
                 }
                 //Ignore anything that doesn't match the commands above.
                 Some(_) => {},

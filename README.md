@@ -10,6 +10,14 @@
 - Discord Developer Portal access (https://discord.com/developers/applications)
 - Bot added to discord and a unique token created (https://www.saintlad.com/add-bots-to-discord-server/)
 
+# Bot permissions
+- Manage Roles
+- Manage Channels
+- View Channels
+- Send Messages
+- Attach Files
+- Read Message History
+
 ## Running bot locally
 1. Install the pre-requisites listed above
 2. Clone the repository
