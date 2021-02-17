@@ -8,7 +8,7 @@ pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String
     println!("In lookup function");
     let embed = Embed {
         author: None,
-        color: Some(123),
+        color: Some(12009742),
         description: Some("Here is a description".to_owned()),
         fields: vec![EmbedField {
             inline: true,
@@ -26,7 +26,7 @@ pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String
         kind: "rich".to_owned(),
         provider: None,
         thumbnail: None,
-        timestamp: Some("timestamp".to_owned()),
+        timestamp: None,
         title: Some("Title".to_owned()),
         url: Some("https://pf2.easytool.es/".to_owned()),
         video: None        
