@@ -7,6 +7,7 @@ use twilight_model::{channel::{GuildChannel, Message, ChannelType::GuildCategory
 use twilight_command_parser::{Command, CommandParserConfig, Parser};
 mod omni;
 mod lookup;
+pub mod discord;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -74,14 +75,14 @@ async fn handle_event(
                     let guild_channels = http.guild_channels(msg.guild_id.expect("Could not get guild ID!")).await?;
                     let bot_data_channel;
                     let bot_data_message: &Message;
-                    match guild_channels.iter().find(|&channel| channel.name() == omni::discord::BOT_DATA_CHANNEL_NAME) {
+                    match guild_channels.iter().find(|&channel| channel.name() == discord::BOT_DATA_CHANNEL_NAME) {
                         Some(channel) => {
                             println!("Found the bot channel!");
                             bot_data_channel = channel;
                         }
                         None => {
                             //Do setup
-                            bot_data_channel = &omni::discord::create_omni_data_channel(&http, &msg, &guild_channels).await?;
+                            bot_data_channel = &discord::create_omni_data_channel(&http, &msg, &guild_channels).await?;
                             http.create_message(msg.channel_id).reply(msg.id).content(format!("Bot setup complete."))?.await?;
                         }
                     }
