@@ -84,7 +84,6 @@ async fn handle_event(
                     omni::handle_command(&discord_refs).await;
                 },
                 Some(Command { name: "lookup", arguments, .. }) => {
-                    println!("In Lookup command");
                     &lookup::lookup(&http, &msg, arguments.as_str().to_string()).await;
                 }
                 //Ignore anything that doesn't match the commands above.
