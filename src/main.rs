@@ -90,7 +90,6 @@ async fn handle_event(
                     //Finally, send the command args & the current data message to the omni crate entry point
                 },
                 Some(Command { name: "lookup", arguments, .. }) => {
-                    println!("In Lookup command");
                     &lookup::lookup(&http, &msg, arguments.as_str().to_string()).await;
                 }
                 //Ignore anything that doesn't match the commands above.
