@@ -4,8 +4,8 @@ use twilight_model::channel::embed::{Embed, EmbedField};
 use anyhow::{Result};
 use reqwest;
 
+//TODO: Abstract the discord api methods. Like "build_embed_from_struct" and "send_text_message" and "send_embed_message"
 pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String) -> Result<(), Box<dyn std::error::Error>> {
-    //Use embed to build the results of the lookup.
     let search_results = search_for_term(&keyword).await?;
     if &search_results.len() == &0 {
         //Can't find any results. Alert user and get out of this function.
