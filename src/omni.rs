@@ -1,14 +1,19 @@
 mod character;
 use crate::omni::character::Character;
+use serde::{Deserialize, Serialize};
 
-struct Tracker {
+
+#[derive(Serialize, Deserialize)]
+pub struct Omnidata {
     version: u16,
+    is_dirty: bool,
     characters:  Vec<Character>,
 }
 
-impl Tracker {
-    pub fn constructTrackerFromMessage(message: String) -> Tracker {
-        return Tracker {version: 0, characters: Vec::new()};
+pub fn constructTrackerFromMessage(message: String) -> Omnidata {
+    return Omnidata {version: 0, characters: Vec::new(), is_dirty: false};
+}
 
-    }
+impl Omnidata {
+ 
 }
