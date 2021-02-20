@@ -27,9 +27,7 @@ pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String
     Ok(())
 }
 
-/**
- * This method splits a result and extracts the id to be used later
- **/
+///extract_id splits a result and extracts the id to be used later
 async fn extract_id(result: &Vec<String>) -> Result<String, Box<dyn std::error::Error>> {
     let slice = &result[0];
     let start_b_slice = slice.find(">").unwrap()+1;
@@ -38,9 +36,7 @@ async fn extract_id(result: &Vec<String>) -> Result<String, Box<dyn std::error::
     return Ok(id)
 }
 
-/**
- * This method splits a result and extracts the title and subtitle to be used later
- **/
+///extract_info splits a result and extracts the title and subtitle to be used later
  async fn extract_info(result: &Vec<String>) -> Result<String, Box<dyn std::error::Error>> {
     let slice = &result[0];
     let end_b_slice = slice.find(">").unwrap();
@@ -49,10 +45,9 @@ async fn extract_id(result: &Vec<String>) -> Result<String, Box<dyn std::error::
     return Ok(info)
 }
 
-/**
- * This method searches for a term, then adds the top 3 results to a vector in the form of
- * ["Prescient Planner - GENERAL FEAT 3 > 8462", "Prescient Consumable - GENERAL FEAT 7 > 8461"]
- **/
+
+///search_for_term searches for a term, then adds the top 3 results to a vector in the form of
+///["Prescient Planner - GENERAL FEAT 3 > 8462", "Prescient Consumable - GENERAL FEAT 7 > 8461"]
 async fn search_for_term(term: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     //This function will return a vector of search results
     let req_body:String = format!("name={}", term);
@@ -99,10 +94,8 @@ async fn search_for_term(term: &str) -> Result<Vec<String>, Box<dyn std::error::
     return Ok(search_results);
 }
 
-/**
- * This method uses an id to find the specific result. Then builds an embed.
- * The embed should use Title, Traits, Details, Description, and URL
- **/
+///build_embed uses an id to find the specific result. Then builds an embed.
+///The embed should use Title, Traits, Details, Description, and URL
 async fn build_embed(id: &str) -> Result<Embed, Box<dyn std::error::Error>> {
     let req_body:String = format!("id={}", id);
     let req_url:String = format!("https://pf2.easytool.es/index.php?id={}", &id);
