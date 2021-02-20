@@ -1,7 +1,8 @@
 use twilight_http::Client as HttpClient;
 use twilight_model::gateway::{payload::MessageCreate};
 use twilight_model::channel::embed::{Embed, EmbedField};
-use anyhow::{Result};
+use anyhow::{Result, anyhow};
+use convert_case::{Case, Casing};
 use reqwest;
 
 //TODO: Abstract the discord api methods. Like "build_embed_from_struct" and "send_text_message" and "send_embed_message"
@@ -45,6 +46,14 @@ async fn extract_id(result: &Vec<String>) -> Result<String, Box<dyn std::error::
     return Ok(info)
 }
 
+///split_string splits a string given a starting text and and ending text.
+async fn split_string(split_me: &str, start_split: &str, end_split: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let skip_length = start_split.len();
+    let start_byte = split_me.find(start_split).unwrap_or(0)+skip_length;
+    let end_byte = split_me.find(end_split).unwrap_or(split_me.len());
+    let output = &split_me[start_byte..end_byte];
+    return Ok(output.to_string());
+}
 
 ///search_for_term searches for a term, then adds the top 3 results to a vector in the form of
 ///["Prescient Planner - GENERAL FEAT 3 > 8462", "Prescient Consumable - GENERAL FEAT 7 > 8461"]
@@ -67,18 +76,12 @@ async fn search_for_term(term: &str) -> Result<Vec<String>, Box<dyn std::error::
         //Add split items to search_results vector
         let mut i: i8 = 0;
         for r in split_response {
-            //Set start and end position of each string split
-            let start_bytes_title = r.find("<strong>").unwrap_or(0)+8;
-            let end_bytes_title = r.find("</strong>").unwrap_or(r.len());
-            let start_bytes_extra = r.find("<small>").unwrap_or(0)+7;
-            let end_bytes_extra = r.find("</small>").unwrap_or(r.len());
-            let start_bytes_id = r.find("value='").unwrap_or(0)+7;
-            let end_bytes_id = r.find("' />").unwrap_or(r.len());
             //Some dumb result comes back in the split like "/n/t/t". This if statement handles that.
             if &r.len() > &8 {
-                let one_result_title = &r[start_bytes_title..end_bytes_title];
-                let one_result_extra = &r[start_bytes_extra..end_bytes_extra];
-                let one_result_id = &r[start_bytes_id..end_bytes_id];
+                //TODO: Figure out a way to get these to run concurrently
+                let one_result_title = split_string(r, "<strong>", "</strong>").await?;
+                let one_result_extra = split_string(r, "<small>","</small>").await?;
+                let one_result_id = split_string(r, "value='", "' />").await?;
                 let one_result = format!("{} - {}>{}", one_result_title, one_result_extra, one_result_id);
                 //Add the result to the vector
                 search_results.push(one_result);
@@ -90,8 +93,9 @@ async fn search_for_term(term: &str) -> Result<Vec<String>, Box<dyn std::error::
             }
         }
         return Ok(search_results);
+    } else{
+        return Ok(search_results);
     }
-    return Ok(search_results);
 }
 
 ///build_embed uses an id to find the specific result. Then builds an embed.
@@ -109,36 +113,66 @@ async fn build_embed(id: &str) -> Result<Embed, Box<dyn std::error::Error>> {
     //Check the response for a success
     if response.status().is_success() {
         //Split the response
-        let _response_string: String = response.text().await?;
+        let response_string: String = response.text().await?;
         //TODO: Split the response string up and extract the Title, Description, Traits, and Details
-        //println!("{:?}", response_string);
-    }
-    
-    let embed = Embed {
-        author: None,
-        color: Some(12009742),
-        description: Some("Description".to_owned()),
-        fields: vec![EmbedField {
-            inline: true,
-            name: "Traits".to_owned(),
-            value: "You looked up a keyword!".to_owned()
-            },
-            EmbedField {
-            inline:true,
-            name: "Details".to_owned(),
-            value: "Static Value".to_owned()
-            }
-        ],
-        footer: None,
-        image: None,
-        kind: "rich".to_owned(),
-        provider: None,
-        thumbnail: None,
-        timestamp: None,
-        title: Some("Title".to_owned()),
-        url: Some(req_url.to_owned()),
-        video: None        
-    };
+        let title = split_string(&response_string, "<title>Pathfinder 2 | ", "</title>").await?
+            .to_case(Case::Upper);
+        let description = split_string(&response_string, "description\' content=\'", "\' />").await?;
+        //println!("{:#?}", response_string);
 
-    return Ok(embed);
+        let embed = Embed {
+            author: None,
+            color: Some(12009742),
+            description: Some(description.to_owned()),
+            fields: vec![EmbedField {
+                inline: true,
+                name: "Traits".to_owned(),
+                value: "You looked up a keyword!".to_owned()
+                },
+                EmbedField {
+                inline:true,
+                name: "Details".to_owned(),
+                value: "Static Value".to_owned()
+                }
+            ],
+            footer: None,
+            image: None,
+            kind: "rich".to_owned(),
+            provider: None,
+            thumbnail: None,
+            timestamp: None,
+            title: Some(title.to_owned()),
+            url: Some(req_url.to_owned()),
+            video: None        
+        };
+        return Ok(embed);
+    } else {
+        let embed = Embed {
+            author: None,
+            color: Some(12009742),
+            description: Some("Unable to connect to easy tools".to_owned()),
+            fields: vec![EmbedField {
+                inline: true,
+                name: "Traits".to_owned(),
+                value: "This was a lookup operation".to_owned()
+                },
+                EmbedField {
+                inline:true,
+                name: "Details".to_owned(),
+                value: "Tried to create embed for discord and failed.".to_owned()
+                }
+            ],
+            footer: None,
+            image: None,
+            kind: "rich".to_owned(),
+            provider: None,
+            thumbnail: None,
+            timestamp: None,
+            title: Some("Error Occured".to_owned()),
+            url: Some(req_url.to_owned()),
+            video: None        
+        };
+
+        return Ok(embed);
+    }
 }
