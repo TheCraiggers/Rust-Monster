@@ -1,4 +1,5 @@
 use std::{env, error::Error};
+use discord::DiscordReferences;
 use futures::stream::StreamExt;
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 use twilight_gateway::{cluster::{Cluster, ShardScheme}, Event};
@@ -59,7 +60,8 @@ async fn handle_event(
     event: Event,
     http: HttpClient,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    //Create the commands the bot will listen for
+    // Create the commands the bot will listen for
+    // TODO: Move this to the parent function. No point in recreating the parser object each time.
     let mut config = CommandParserConfig::new();
     config.add_prefix("!");
     config.add_prefix("! ");    //For mobile users like me. Android puts a space after ! because it's punctuation
@@ -69,6 +71,7 @@ async fn handle_event(
 
     match event {
         Event::MessageCreate(msg) => {
+            let discord_references: DiscordReferences = DiscordReferences {http: &http, msg: &msg};
             match parser.parse(&msg.content) {
                 Some(Command { name: "omni", arguments, .. }) => {
                     //Get the bot data from the guild. But first, we need to get the channel, or create it.
@@ -82,12 +85,14 @@ async fn handle_event(
                         }
                         None => {
                             //Do setup
-                            bot_data_channel = &discord::create_omni_data_channel(&http, &msg, &guild_channels).await?;
+                            bot_data_channel = &discord::create_omni_data_channel(&discord_references, &guild_channels).await?;
                             http.create_message(msg.channel_id).reply(msg.id).content(format!("Bot setup complete."))?.await?;
                         }
                     }
                     //Next, get the messages in that channel and look for the active one.
                     //Finally, send the command args & the current data message to the omni crate entry point
+                    let omnidata: omni::Omnidata = omni::constructTrackerFromMessage("foo".to_string());
+                    discord::omni_data_save(&discord_references, omnidata);
                 },
                 Some(Command { name: "lookup", arguments, .. }) => {
                     println!("In Lookup command");

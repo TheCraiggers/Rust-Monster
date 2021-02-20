@@ -1,11 +1,22 @@
+use omni::{Omnidata, constructTrackerFromMessage};
 use twilight_http::Client as HttpClient;
 use twilight_model::{channel::{GuildChannel, ChannelType::GuildCategory}, gateway::{payload::MessageCreate}};
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
+use serde_json::json;
+use serde::{Deserialize, Serialize};
+use crate::omni;
 
 pub const BOT_DATA_CHANNEL_CATEGORY_NAME: &str = "rust-monster-bot-data";
 pub const BOT_DATA_CHANNEL_NAME: &str = "omni-bot-data"; //This variable and string also exist in main.rs. If an update is made, it needs to be made there too.
 
-pub async fn create_omni_data_channel(http: &HttpClient, msg: &Box<MessageCreate>, guild_channels: &Vec<GuildChannel>) -> Result<GuildChannel> {
+/// The standard amount of info that all discord functions take.
+pub struct DiscordReferences<'a> {
+    pub http: &'a HttpClient,
+    pub msg: &'a Box<MessageCreate>,
+}
+
+/// This is an idempotent function that will create the channels to house all bot data and a category to contain them.
+pub async fn create_omni_data_channel(DiscordReferences { http, msg }: &DiscordReferences<'_>, guild_channels: &Vec<GuildChannel>) -> Result<GuildChannel> {
     //Usually we want to make the channel in a category to make things easier for the server owner to manage, so find/make that first.
     let channel_category;
     match guild_channels.iter().find(|&channel| channel.name() == BOT_DATA_CHANNEL_CATEGORY_NAME) {
@@ -40,4 +51,12 @@ pub async fn create_omni_data_channel(http: &HttpClient, msg: &Box<MessageCreate
         }
     }
     return Ok(bot_data_channel.clone());
+}
+
+/// Save the omni data to the discord guild to preserve state between bot commands.
+/// Will only do anything if the omnidata object is dirty.
+pub fn omni_data_save(DiscordReferences { http, msg }: &DiscordReferences<'_>, omnidata: omni::Omnidata) -> Result<()> {
+    let foo = serde_json::to_string(&omnidata);
+    println!("{:?}", foo);
+    return Ok(());
 }
