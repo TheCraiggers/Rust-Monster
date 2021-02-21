@@ -1,7 +1,7 @@
 use twilight_http::Client as HttpClient;
 use twilight_model::gateway::{payload::MessageCreate};
 use twilight_model::channel::embed::{Embed, EmbedField};
-use anyhow::{Result, anyhow};
+use anyhow::{Result};
 use convert_case::{Case, Casing};
 use reqwest;
 
@@ -19,7 +19,7 @@ pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String
         let embed = build_embed(&id).await?;
         http.create_message(msg.channel_id).reply(msg.id).embed(embed)?.await?;
     } else {
-        //Disambiguous. Ask user which of the short list they mean.
+        //Ambiguous. Ask user which of the short list they mean.
         //TODO: Ask User which result they mean. Then start making the embed after that
         println!("A lot of matches {:?}", &search_results);
         let embed = build_embed(&"8461").await?;
@@ -53,6 +53,57 @@ async fn split_string(split_me: &str, start_split: &str, end_split: &str) -> Res
     let end_byte = split_me.find(end_split).unwrap_or(split_me.len());
     let output = &split_me[start_byte..end_byte];
     return Ok(output.to_string());
+}
+
+///sanitize removes html formatting from a string. It replaces <p> with new lines and h3 with spaces
+async fn sanitize(sanitize_me: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let iter = sanitize_me.len()/3;
+    let mut return_string = sanitize_me.to_string();
+    for n in 0..iter {
+        if return_string.find("<") == None || return_string.find(">") == None {
+            return Ok(return_string)
+        }
+        let start_byte = return_string.find("<").unwrap(); 
+        let mut end_byte = return_string.find(">").unwrap()+1;
+        let mut temp_string = &return_string[start_byte+1..]; 
+        let mut open_count = 1;
+        let mut close_count = 0;
+        let mut byte_count = start_byte+1;
+
+        loop {
+            if temp_string.find("<") == None || temp_string.find(">") == None {
+                if temp_string.find("<") == None {
+                    end_byte = return_string.find(">").unwrap()+1;
+                } else{
+                end_byte = byte_count;
+                }
+                break
+            }
+            if temp_string.find("<").unwrap() < temp_string.find(">").unwrap() {
+                open_count += 1;
+                byte_count = byte_count+temp_string.find("<").unwrap()+1;
+                temp_string = &temp_string[temp_string.find("<").unwrap()+1..];
+            } else {
+                close_count += 1;
+                byte_count = byte_count+temp_string.find(">").unwrap()+1;
+                temp_string = &temp_string[temp_string.find(">").unwrap()+1..];
+            }
+            if open_count == close_count {
+                end_byte = byte_count;
+                break
+            }
+        }
+        
+        let slice = &return_string[start_byte..end_byte];
+        let mut new_slice = "";
+        if &slice == &"<p>" {
+            new_slice = "\n";
+        } else if slice.contains("h3") {
+            new_slice = " ";
+        }
+        return_string = return_string.replace(slice, new_slice);
+    }
+    return Ok(return_string)
 }
 
 ///search_for_term searches for a term, then adds the top 3 results to a vector in the form of
@@ -112,12 +163,36 @@ async fn build_embed(id: &str) -> Result<Embed, Box<dyn std::error::Error>> {
         .await?;
     //Check the response for a success
     if response.status().is_success() {
-        //Split the response
         let response_string: String = response.text().await?;
-        //TODO: Split the response string up and extract the Title, Description, Traits, and Details
+        //Get title
         let title = split_string(&response_string, "<title>Pathfinder 2 | ", "</title>").await?
             .to_case(Case::Upper);
-        let description = split_string(&response_string, "description\' content=\'", "\' />").await?;
+        //Get main description
+        let init_description = split_string(&response_string, "description\' content=\'", "\' />").await?;
+        //Chop the length of the description if it is too large for the embed
+        let mut description: String = "Description Placeholder".to_string();
+        if &init_description.len() > &2047 {
+            description = format!("{}{}", &init_description[..2019], "... click the title for more");
+        } else {
+            description = init_description;
+        }
+        //If traits exist, get the traits
+        if &response_string.find("class=\'traits\'>").unwrap_or(0) != &0 {
+        let traits_string = split_string(&response_string, "class=\'traits\'>", "</section>\n\t\t\t\t<section class=\'details\'>").await?;
+        let traits_value = sanitize(&traits_string).await?;
+        println!("TRAITS: {}", &traits_value);
+        let traits = EmbedField {
+            inline: true,
+            name: "Traits".to_owned(),
+            value: traits_value.to_owned()
+        };
+        }
+        //If details exist, get the details
+        if &response_string.find("class=\'details\'>").unwrap_or(0) != &0 {
+        let details_string = split_string(&response_string, "class=\'details\'>", "</section>\n\t\t\t<footer class").await?;
+        //Update description to have the detail from the details
+        println!("DESCRIPTION: {}", sanitize(&details_string).await?);
+        }
         //println!("{:#?}", response_string);
 
         let embed = Embed {
@@ -150,7 +225,7 @@ async fn build_embed(id: &str) -> Result<Embed, Box<dyn std::error::Error>> {
         let embed = Embed {
             author: None,
             color: Some(12009742),
-            description: Some("Unable to connect to easy tools".to_owned()),
+            description: Some("Unable to connect to pf2.easytools".to_owned()),
             fields: vec![EmbedField {
                 inline: true,
                 name: "Traits".to_owned(),
