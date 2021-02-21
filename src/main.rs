@@ -71,28 +71,17 @@ async fn handle_event(
 
     match event {
         Event::MessageCreate(msg) => {
-            let discord_references: DiscordReferences = DiscordReferences {http: &http, msg: &msg};
+            let discord_refs: DiscordReferences = DiscordReferences {http: &http, msg: &msg};
             match parser.parse(&msg.content) {
                 Some(Command { name: "omni", arguments, .. }) => {
                     //Get the bot data from the guild. But first, we need to get the channel, or create it.
-                    let guild_channels = http.guild_channels(msg.guild_id.expect("Could not get guild ID!")).await?;
-                    let bot_data_channel;
-                    let bot_data_message: &Message;
-                    match guild_channels.iter().find(|&channel| channel.name() == discord::BOT_DATA_CHANNEL_NAME) {
-                        Some(channel) => {
-                            println!("Found the bot channel!");
-                            bot_data_channel = channel;
-                        }
-                        None => {
-                            //Do setup
-                            bot_data_channel = &discord::create_omni_data_channel(&discord_references, &guild_channels).await?;
-                            http.create_message(msg.channel_id).reply(msg.id).content(format!("Bot setup complete."))?.await?;
-                        }
-                    }
+                    //let bot_data_channel = discord::get_omni_data_channel(&discord_references).await?;
+                    //let bot_data_message: &Message;
+                    
                     //Next, get the messages in that channel and look for the active one.
                     //Finally, send the command args & the current data message to the omni crate entry point
-                    let omnidata: omni::Omnidata = omni::constructTrackerFromMessage("foo".to_string());
-                    discord::omni_data_save(&discord_references, omnidata);
+
+                    omni::handle_command(&discord_refs).await;
                 },
                 Some(Command { name: "lookup", arguments, .. }) => {
                     println!("In Lookup command");

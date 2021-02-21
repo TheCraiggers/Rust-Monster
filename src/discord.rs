@@ -1,7 +1,15 @@
-use omni::{Omnidata, constructTrackerFromMessage};
+//! At the time of writing this, both Discord libs for Rust are quite new and haven't reached 1.0 status yet.
+//! Also, as the communities are still quite small, there are risks about maintainability as well.
+//! Because of this, it was decided to create a layer between the "bot code" and the discord library.
+//! This way, if the library ever needed to be switched, or if a breaking change was introduced, we could simply
+//! update the code here and all of the calling functions would be ignorant.
+
+use std::convert::TryInto;
+
+use omni::{Omnidata};
 use twilight_http::Client as HttpClient;
 use twilight_model::{channel::{GuildChannel, ChannelType::GuildCategory}, gateway::{payload::MessageCreate}};
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use serde_json::json;
 use serde::{Deserialize, Serialize};
 use crate::omni;
@@ -53,10 +61,51 @@ pub async fn create_omni_data_channel(DiscordReferences { http, msg }: &DiscordR
     return Ok(bot_data_channel.clone());
 }
 
+pub async fn get_omni_data_channel(discord_references: &DiscordReferences<'_>) -> Result<GuildChannel> {
+    let guild_channels = discord_references.http.guild_channels(discord_references.msg.guild_id.expect("Could not get guild ID!")).await?;
+    match guild_channels.iter().find(|&channel| channel.name() == BOT_DATA_CHANNEL_NAME) {
+        Some(channel) => {
+            println!("Found the bot channel!");
+            return Ok(channel.to_owned());
+        }
+        None => {
+            //Do setup
+            discord_references.http.create_message(discord_references.msg.channel_id).reply(discord_references.msg.id).content(format!("Bot setup complete."))?.await?;
+            return Ok(create_omni_data_channel(&discord_references, &guild_channels).await?.to_owned());
+        }
+    }
+}
+
 /// Save the omni data to the discord guild to preserve state between bot commands.
 /// Will only do anything if the omnidata object is dirty.
-pub fn omni_data_save(DiscordReferences { http, msg }: &DiscordReferences<'_>, omnidata: omni::Omnidata) -> Result<()> {
-    let foo = serde_json::to_string(&omnidata);
-    println!("{:?}", foo);
+pub async fn omni_data_save(discord_references: &DiscordReferences<'_>, omnidata: omni::Omnidata) -> Result<()> {
+    let serialized = serde_json::to_vec(&omnidata)?;
+    let data_channel = get_omni_data_channel(&discord_references).await?;
+    discord_references.http.create_message(data_channel.id())
+        .attachment("state", serialized)    
+        .content(format!("'{}'", &discord_references.msg.content))?.await?;
+
+    println!("Message Sent!");
     return Ok(());
+}
+
+/// Given a discord ref struct, find the current omni tracker data, deserialize it, and return a usable object
+pub async fn constructTracker(discord_refs: &DiscordReferences<'_>) -> Result<Omnidata> {
+    let data_channel = get_omni_data_channel(discord_refs).await?;
+    let messages = discord_refs.http.channel_messages(data_channel.id()).await;
+    let pins = discord_refs.http.pins(data_channel.id()).await?;
+
+match pins.len() {
+    1 => {
+        println!("{}", pins[0].attachments[0].url);
+        return Ok(Omnidata {version: 0, characters: Vec::new(), is_dirty: false})
+        //return Ok(serde_json::from_str(s))
+    },
+    0 => return Ok(Omnidata {version: 0, characters: Vec::new(), is_dirty: false}),
+    _ => return Err(anyhow!("Bot data is messed up! What did you do?!")),
+}
+    // First time the bot has run. Create an empty omni object for now.
+
+
+    //println!("{:?}", messages);
 }
