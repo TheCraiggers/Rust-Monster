@@ -13,6 +13,7 @@ use anyhow::{Context, Result, anyhow};
 use serde_json::json;
 use serde::{Deserialize, Serialize};
 use crate::omni;
+use reqwest;
 
 pub const BOT_DATA_CHANNEL_CATEGORY_NAME: &str = "rust-monster-bot-data";
 pub const BOT_DATA_CHANNEL_NAME: &str = "omni-bot-data"; //This variable and string also exist in main.rs. If an update is made, it needs to be made there too.
@@ -95,15 +96,15 @@ pub async fn constructTracker(discord_refs: &DiscordReferences<'_>) -> Result<Om
     let messages = discord_refs.http.channel_messages(data_channel.id()).await;
     let pins = discord_refs.http.pins(data_channel.id()).await?;
 
-match pins.len() {
-    1 => {
-        println!("{}", pins[0].attachments[0].url);
-        return Ok(Omnidata {version: 0, characters: Vec::new(), is_dirty: false})
-        //return Ok(serde_json::from_str(s))
-    },
-    0 => return Ok(Omnidata {version: 0, characters: Vec::new(), is_dirty: false}),
-    _ => return Err(anyhow!("Bot data is messed up! What did you do?!")),
-}
+    match pins.len() {
+        1 => {
+            let data = reqwest::get(&pins[0].attachments[0].url).await?.text().await?;
+            let omnidata: Omnidata = serde_json::from_str(&data)?;
+            return Ok(omnidata);
+        },
+        0 => return Ok(Omnidata {version: 0, characters: Vec::new(), is_dirty: false}),
+        _ => return Err(anyhow!("Bot data is messed up! What did you do?!")),
+    }
     // First time the bot has run. Create an empty omni object for now.
 
 
