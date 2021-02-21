@@ -178,20 +178,26 @@ async fn build_embed(id: &str) -> Result<Embed, Box<dyn std::error::Error>> {
         }
         //If traits exist, get the traits
         if &response_string.find("class=\'traits\'>").unwrap_or(0) != &0 {
-        let traits_string = split_string(&response_string, "class=\'traits\'>", "</section>\n\t\t\t\t<section class=\'details\'>").await?;
-        let traits_value = sanitize(&traits_string).await?;
-        println!("TRAITS: {}", &traits_value);
-        let traits = EmbedField {
-            inline: true,
-            name: "Traits".to_owned(),
-            value: traits_value.to_owned()
-        };
+            let traits_string = split_string(&response_string, "class=\'traits\'>", "</section>\n\t\t\t\t<section class=\'details\'>").await?;
+            let traits_value = sanitize(&traits_string).await?;
+            println!("TRAITS: {}", &traits_value);
+            let traits = EmbedField {
+                inline: true,
+                name: "Traits".to_owned(),
+                value: traits_value.to_owned()
+            };
         }
         //If details exist, get the details
         if &response_string.find("class=\'details\'>").unwrap_or(0) != &0 {
-        let details_string = split_string(&response_string, "class=\'details\'>", "</section>\n\t\t\t<footer class").await?;
-        //Update description to have the detail from the details
-        println!("DESCRIPTION: {}", sanitize(&details_string).await?);
+            let details_string = split_string(&response_string, "class=\'details\'>", "</section>\n\t\t\t<footer class").await?;
+            //Update description to have the detail from the details
+            let description_value = sanitize(&details_string).await?;
+            println!("DESCRIPTION: {}", description_value);
+            if &description_value.len() > &2047 {
+                description = format!("{}{}", &description_value[..2019], "... click the title for more");
+            } else {
+                description = description_value;
+            }
         }
         //println!("{:#?}", response_string);
 
