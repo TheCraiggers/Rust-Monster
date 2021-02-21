@@ -19,5 +19,6 @@ impl Omnidata {
 
 pub async fn handle_command(discord_refs: &DiscordReferences<'_>) -> Result<()> {
     let omnidata = constructTracker(&discord_refs).await?;
+    println!("{}", omnidata.version);
     return Ok(());
 }
