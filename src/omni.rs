@@ -1,19 +1,23 @@
 mod character;
 use crate::omni::character::Character;
 use serde::{Deserialize, Serialize};
-
+use crate::discord::{*};
+use anyhow::{Result};
 
 #[derive(Serialize, Deserialize)]
 pub struct Omnidata {
-    version: u16,
-    is_dirty: bool,
-    characters:  Vec<Character>,
+    pub version: u16,
+    pub is_dirty: bool,
+    pub characters:  Vec<Character>,
 }
 
-pub fn constructTrackerFromMessage(message: String) -> Omnidata {
-    return Omnidata {version: 0, characters: Vec::new(), is_dirty: false};
-}
+
 
 impl Omnidata {
  
+}
+
+pub async fn handle_command(discord_refs: &DiscordReferences<'_>) -> Result<()> {
+    let omnidata = constructTracker(&discord_refs).await?;
+    return Ok(());
 }
