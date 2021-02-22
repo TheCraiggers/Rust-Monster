@@ -15,15 +15,14 @@ pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String
     } else if &search_results.len() == &1 {
         //Exact match! Start building the embed and send a response
         println!("Exact match! {:?}", &search_results);
-        let id = extract_id(&search_results).await?;
-        let embed = build_embed(&id).await?;
+        let embed = build_embed(&search_results).await?;
         http.create_message(msg.channel_id).reply(msg.id).embed(embed)?.await?;
     } else {
         //Ambiguous. Ask user which of the short list they mean.
         //TODO: Ask User which result they mean. Then start making the embed after that
         println!("A lot of matches {:?}", &search_results);
-        let embed = build_embed(&"8461").await?;
-        http.create_message(msg.channel_id).reply(msg.id).embed(embed)?.await?;
+        //let embed = build_embed(&"8461").await?;
+        //http.create_message(msg.channel_id).reply(msg.id).embed(embed)?.await?;
     }
     Ok(())
 }
@@ -72,7 +71,7 @@ async fn sanitize(sanitize_me: &str) -> Result<String, Box<dyn std::error::Error
 
         loop {
             if temp_string.find("<") == None || temp_string.find(">") == None {
-                if temp_string.find("<") == None {
+                if temp_string.find(">") != None {
                     end_byte = return_string.find(">").unwrap()+1;
                 } else{
                 end_byte = byte_count;
@@ -98,8 +97,8 @@ async fn sanitize(sanitize_me: &str) -> Result<String, Box<dyn std::error::Error
         let mut new_slice = "";
         if &slice == &"<p>" {
             new_slice = "\n";
-        } else if slice.contains("h3") {
-            new_slice = " ";
+        } else if slice.contains("/h3") {
+            new_slice = "\n";
         }
         return_string = return_string.replace(slice, new_slice);
     }
@@ -151,7 +150,8 @@ async fn search_for_term(term: &str) -> Result<Vec<String>, Box<dyn std::error::
 
 ///build_embed uses an id to find the specific result. Then builds an embed.
 ///The embed should use Title, Traits, Details, Description, and URL
-async fn build_embed(id: &str) -> Result<Embed, Box<dyn std::error::Error>> {
+async fn build_embed(result: &Vec<String>) -> Result<Embed, Box<dyn std::error::Error>> {
+    let id = extract_id(&result).await?;
     let req_body:String = format!("id={}", id);
     let req_url:String = format!("https://pf2.easytool.es/index.php?id={}", &id);
     let client = reqwest::Client::new();
@@ -165,23 +165,36 @@ async fn build_embed(id: &str) -> Result<Embed, Box<dyn std::error::Error>> {
     if response.status().is_success() {
         let response_string: String = response.text().await?;
         //Get title
-        let title = split_string(&response_string, "<title>Pathfinder 2 | ", "</title>").await?
+        let title = extract_info(&result).await?
             .to_case(Case::Upper);
         //Get main description
         let init_description = split_string(&response_string, "description\' content=\'", "\' />").await?;
         //Chop the length of the description if it is too large for the embed
         let mut description: String = "Description Placeholder".to_string();
+        //Pretty format for success/failure conditions.
+        description = str::replace(&description, "\nType", "\n\nType");
+        description = str::replace(&description, ". Critical Success", ".\n\nCritical Success");
+        description = str::replace(&description, ". Success", ".\n\nSuccess");
+        description = str::replace(&description, ". Failure", ".\n\nFailure");
+        description = str::replace(&description, ". Critical Failure", ".\n\nCritical Failure");
+
         if &init_description.len() > &2047 {
             description = format!("{}{}", &init_description[..2019], "... click the title for more");
         } else {
             description = init_description;
         }
-        //If traits exist, get the traits
+        //If traits exist, get the traits, otherwise send an empty struct
+        let mut traits = EmbedField {
+            inline: true,
+            name: "Empty".to_owned(),
+            value: "Empty".to_owned()
+        };
+
         if &response_string.find("class=\'traits\'>").unwrap_or(0) != &0 {
             let traits_string = split_string(&response_string, "class=\'traits\'>", "</section>\n\t\t\t\t<section class=\'details\'>").await?;
             let traits_value = sanitize(&traits_string).await?;
             println!("TRAITS: {}", &traits_value);
-            let traits = EmbedField {
+            traits = EmbedField {
                 inline: true,
                 name: "Traits".to_owned(),
                 value: traits_value.to_owned()
@@ -191,7 +204,12 @@ async fn build_embed(id: &str) -> Result<Embed, Box<dyn std::error::Error>> {
         if &response_string.find("class=\'details\'>").unwrap_or(0) != &0 {
             let details_string = split_string(&response_string, "class=\'details\'>", "</section>\n\t\t\t<footer class").await?;
             //Update description to have the detail from the details
-            let description_value = sanitize(&details_string).await?;
+            let mut description_value = sanitize(&details_string).await?;
+            description_value = str::replace(&description_value, "\nType", "\n\nType");
+            description_value = str::replace(&description_value, ". Critical Success", ".\n\nCritical Success");
+            description_value = str::replace(&description_value, ". Success", ".\n\nSuccess");
+            description_value = str::replace(&description_value, ". Failure", ".\n\nFailure");
+            description_value = str::replace(&description_value, ". Critical Failure", ".\n\nCritical Failure");
             println!("DESCRIPTION: {}", description_value);
             if &description_value.len() > &2047 {
                 description = format!("{}{}", &description_value[..2019], "... click the title for more");
@@ -200,22 +218,17 @@ async fn build_embed(id: &str) -> Result<Embed, Box<dyn std::error::Error>> {
             }
         }
         //println!("{:#?}", response_string);
+        //Build fields
+        let mut fields_vec: Vec<EmbedField> = [].to_vec();
+        if traits.name != "Empty" {
+            fields_vec = vec![traits];
+        }
 
         let embed = Embed {
             author: None,
             color: Some(12009742),
             description: Some(description.to_owned()),
-            fields: vec![EmbedField {
-                inline: true,
-                name: "Traits".to_owned(),
-                value: "You looked up a keyword!".to_owned()
-                },
-                EmbedField {
-                inline:true,
-                name: "Details".to_owned(),
-                value: "Static Value".to_owned()
-                }
-            ],
+            fields: fields_vec,
             footer: None,
             image: None,
             kind: "rich".to_owned(),
