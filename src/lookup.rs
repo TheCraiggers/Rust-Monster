@@ -1,6 +1,7 @@
 use twilight_http::Client as HttpClient;
 use twilight_model::gateway::{payload::MessageCreate};
 use twilight_model::channel::embed::{Embed, EmbedField};
+use twilight_standby::Standby;
 use anyhow::{Result};
 use convert_case::{Case, Casing};
 use reqwest;
@@ -19,10 +20,36 @@ pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String
         http.create_message(msg.channel_id).reply(msg.id).embed(embed)?.await?;
     } else {
         //Ambiguous. Ask user which of the short list they mean.
-        //TODO: Ask User which result they mean. Then start making the embed after that
         println!("A lot of matches {:?}", &search_results);
-        //let embed = build_embed(&"8461").await?;
-        //http.create_message(msg.channel_id).reply(msg.id).embed(embed)?.await?;
+        let mut options_string: String = String::from("");
+        for option in 0..search_results.len() {
+            let mut named_option = Vec::new();
+            named_option.push(String::from(&search_results[option]));
+            let option_info = extract_info(&named_option).await?;
+            options_string = format!("{}\n[{}] {}", options_string, option+1, option_info);
+        }
+        //Add cancel option
+        options_string = format!("{}\n[{}] Cancel", options_string, search_results.len()+1);
+
+        http.create_message(msg.channel_id).reply(msg.id).content(format!("Found more than one possible term. Please let me know which one to look up by simply responding with the number shown beside the desired choice.\n{}", options_string))?.await?;
+        let standby = Standby::new();
+        let message = msg.to_owned();
+        let decision = standby.wait_for_message(message.channel_id, move |event: &MessageCreate| {
+            event.author.id == message.author.id && (event.content == "1" || event.content == "2" || event.content == "3" || event.content == "4")
+        }).await?;
+        println!("DECISION? {:?}", decision);
+        //Convert user choice to usize, then respond with choice
+        let user_response = decision.content.parse::<usize>().unwrap();
+        if user_response == search_results.len()+1 {
+            println!("Canceled");
+        } else {
+            println!("Do something");
+            let response_string = &search_results[user_response];
+            let mut response_vec: Vec<String> = Vec::new();
+            response_vec.push(response_string.to_string());
+            let embed = build_embed(&response_vec).await?;
+            http.create_message(msg.channel_id).reply(msg.id).embed(embed)?.await?;
+        }
     }
     Ok(())
 }
@@ -95,14 +122,34 @@ async fn sanitize(sanitize_me: &str) -> Result<String, Box<dyn std::error::Error
         
         let slice = &return_string[start_byte..end_byte];
         let mut new_slice = "";
-        if &slice == &"<p>" {
+        //TODO: use custom emojis like https://github.com/Rapptz/discord.py/issues/390 instead of :one:, :two:, etc.
+        if &slice == &"<p>" || &slice == &"<p class=\"fancy\">" || slice.contains("/h3") {
             new_slice = "\n";
-        } else if slice.contains("/h3") {
-            new_slice = "\n";
+        } else if &slice == &"</section>" {
+            new_slice = "\n------------";
+        } else if slice.contains("class=\"pf2 action1\"") {
+            new_slice = " :one: ";
+        } else if slice.contains("class=\"pf2 action2\"") {
+            new_slice = " :two: ";
+        } else if slice.contains("class=\"pf2 action3\"") {
+            new_slice = " :three: ";
+        } else if slice.contains("class=\"pf2 Reaction\"") {
+            new_slice = " :arrow_heading_down: ";
+        } else if slice.contains("class=\"pf2 actionF\"") {
+            new_slice = " :free: ";
         }
         return_string = return_string.replace(slice, new_slice);
     }
     return Ok(return_string)
+}
+
+async fn pretty_format(mut string_to_format: String) -> Result<String, Box<dyn std::error::Error>> {
+    string_to_format = str::replace(&string_to_format, "\nType", "\n\nType");
+    string_to_format = str::replace(&string_to_format, ". Critical Success", ".\n\nCritical Success");
+    string_to_format = str::replace(&string_to_format, ". Success", ".\n\nSuccess");
+    string_to_format = str::replace(&string_to_format, ". Failure", ".\n\nFailure");
+    string_to_format = str::replace(&string_to_format, ". Critical Failure", ".\n\nCritical Failure");
+    return Ok(string_to_format)
 }
 
 ///search_for_term searches for a term, then adds the top 3 results to a vector in the form of
@@ -172,11 +219,7 @@ async fn build_embed(result: &Vec<String>) -> Result<Embed, Box<dyn std::error::
         //Chop the length of the description if it is too large for the embed
         let mut description: String = "Description Placeholder".to_string();
         //Pretty format for success/failure conditions.
-        description = str::replace(&description, "\nType", "\n\nType");
-        description = str::replace(&description, ". Critical Success", ".\n\nCritical Success");
-        description = str::replace(&description, ". Success", ".\n\nSuccess");
-        description = str::replace(&description, ". Failure", ".\n\nFailure");
-        description = str::replace(&description, ". Critical Failure", ".\n\nCritical Failure");
+        description = pretty_format(description).await?;
 
         if &init_description.len() > &2047 {
             description = format!("{}{}", &init_description[..2019], "... click the title for more");
@@ -193,7 +236,7 @@ async fn build_embed(result: &Vec<String>) -> Result<Embed, Box<dyn std::error::
         if &response_string.find("class=\'traits\'>").unwrap_or(0) != &0 {
             let traits_string = split_string(&response_string, "class=\'traits\'>", "</section>\n\t\t\t\t<section class=\'details\'>").await?;
             let traits_value = sanitize(&traits_string).await?;
-            println!("TRAITS: {}", &traits_value);
+            //println!("TRAITS: {}", &traits_value);
             traits = EmbedField {
                 inline: true,
                 name: "Traits".to_owned(),
@@ -205,12 +248,8 @@ async fn build_embed(result: &Vec<String>) -> Result<Embed, Box<dyn std::error::
             let details_string = split_string(&response_string, "class=\'details\'>", "</section>\n\t\t\t<footer class").await?;
             //Update description to have the detail from the details
             let mut description_value = sanitize(&details_string).await?;
-            description_value = str::replace(&description_value, "\nType", "\n\nType");
-            description_value = str::replace(&description_value, ". Critical Success", ".\n\nCritical Success");
-            description_value = str::replace(&description_value, ". Success", ".\n\nSuccess");
-            description_value = str::replace(&description_value, ". Failure", ".\n\nFailure");
-            description_value = str::replace(&description_value, ". Critical Failure", ".\n\nCritical Failure");
-            println!("DESCRIPTION: {}", description_value);
+            description_value = pretty_format(description_value).await?;
+            //println!("DESCRIPTION: {}", description_value);
             if &description_value.len() > &2047 {
                 description = format!("{}{}", &description_value[..2019], "... click the title for more");
             } else {
@@ -227,7 +266,7 @@ async fn build_embed(result: &Vec<String>) -> Result<Embed, Box<dyn std::error::
         let embed = Embed {
             author: None,
             color: Some(12009742),
-            description: Some(description.to_owned()),
+            description: Some(description.to_string()), //emoji can be placed in here as :emoji_name: "Something &lt;strong>bold</strong> here"
             fields: fields_vec,
             footer: None,
             image: None,
