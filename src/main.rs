@@ -74,14 +74,7 @@ async fn handle_event(
             let discord_refs: DiscordReferences = DiscordReferences {http: &http, msg: &msg};
             match parser.parse(&msg.content) {
                 Some(Command { name: "omni", arguments, .. }) => {
-                    //Get the bot data from the guild. But first, we need to get the channel, or create it.
-                    //let bot_data_channel = discord::get_omni_data_channel(&discord_references).await?;
-                    //let bot_data_message: &Message;
-                    
-                    //Next, get the messages in that channel and look for the active one.
-                    //Finally, send the command args & the current data message to the omni crate entry point
-
-                    omni::handle_command(&discord_refs).await;
+                    omni::handle_command(&discord_refs).await?;
                 },
                 Some(Command { name: "lookup", arguments, .. }) => {
                     &lookup::lookup(&http, &msg, arguments.as_str().to_string()).await;
