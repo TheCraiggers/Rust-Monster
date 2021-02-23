@@ -14,6 +14,7 @@ use serde_json::json;
 use serde::{Deserialize, Serialize};
 use crate::omni;
 use reqwest;
+use futures;
 
 pub const BOT_DATA_CHANNEL_CATEGORY_NAME: &str = "rust-monster-bot-data";
 pub const BOT_DATA_CHANNEL_NAME: &str = "omni-bot-data"; //This variable and string also exist in main.rs. If an update is made, it needs to be made there too.
@@ -78,32 +79,42 @@ pub async fn get_omni_data_channel(discord_references: &DiscordReferences<'_>) -
 }
 
 /// Save the omni data to the discord guild to preserve state between bot commands.
+/// This also takes care of pinning the new message and unpinning all others.
 /// Will only do anything if the omnidata object is dirty.
 pub async fn omni_data_save(discord_references: &DiscordReferences<'_>, omnidata: omni::Omnidata) -> Result<()> {
     let serialized = serde_json::to_vec(&omnidata)?;
     let data_channel = get_omni_data_channel(&discord_references).await?;
-    discord_references.http.create_message(data_channel.id())
+    let new_message = discord_references.http.create_message(data_channel.id())
         .attachment("state", serialized)    
         .content(format!("'{}'", &discord_references.msg.content))?.await?;
 
-    println!("Message Sent!");
+    // The bot relies on a message being pinned in the data channel to know which one is the 'active' one. Unpin the old one, then pin the new one.
+    let mut pin_jobs = Vec::new();
+    let old_pins = discord_references.http.pins(new_message.channel_id).await?;
+    for old_pin in old_pins.iter() {
+        pin_jobs.push(discord_references.http.delete_pin(old_pin.channel_id, old_pin.id));
+    }
+    let delete_jobs = futures::future::join_all(pin_jobs);
+    let foo = discord_references.http.create_pin(new_message.channel_id, new_message.id);
+    futures::join!(delete_jobs, foo);
     return Ok(());
 }
 
 /// Given a discord ref struct, find the current omni tracker data, deserialize it, and return a usable object
-pub async fn constructTracker(discord_refs: &DiscordReferences<'_>) -> Result<Omnidata> {
+pub async fn construct_tracker(discord_refs: &DiscordReferences<'_>) -> Result<Omnidata> {
     let data_channel = get_omni_data_channel(discord_refs).await?;
     let messages = discord_refs.http.channel_messages(data_channel.id()).await;
     let pins = discord_refs.http.pins(data_channel.id()).await?;
 
     match pins.len() {
-        1 => {
+        0 => return Ok(omni::create_empty_omnidata()),
+        _ => {
+            // TODO: Figure out a clever way to deal with race conditions that lead to more than one
+            // active data entry at one time. For now, just load the latest (or whatever is in index 0)
             let data = reqwest::get(&pins[0].attachments[0].url).await?.text().await?;
             let omnidata: Omnidata = serde_json::from_str(&data)?;
             return Ok(omnidata);
         },
-        0 => return Ok(Omnidata {version: 0, characters: Vec::new(), is_dirty: false}),
-        _ => return Err(anyhow!("Bot data is messed up! What did you do?!")),
     }
     // First time the bot has run. Create an empty omni object for now.
 

@@ -2,7 +2,7 @@ use time::Duration;
 use crate::omni::character::Character;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Effect {
     name: String,
     duration: Duration,
