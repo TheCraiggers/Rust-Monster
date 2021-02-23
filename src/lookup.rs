@@ -81,7 +81,7 @@ async fn split_string(split_me: &str, start_split: &str, end_split: &str) -> Res
     return Ok(output.to_string());
 }
 
-///sanitize removes html formatting from a string. It replaces <p> with new lines and h3 with spaces
+///sanitize removes html formatting from a string. It replaces some html formatting with discord syntax, and some emojis.
 async fn sanitize(sanitize_me: &str) -> Result<String, Box<dyn std::error::Error>> {
     let iter = sanitize_me.len()/3;
     let mut return_string = sanitize_me.to_string();
@@ -123,6 +123,7 @@ async fn sanitize(sanitize_me: &str) -> Result<String, Box<dyn std::error::Error
         let slice = &return_string[start_byte..end_byte];
         let mut new_slice = "";
         //TODO: use custom emojis like https://github.com/Rapptz/discord.py/issues/390 instead of :one:, :two:, etc.
+        //Use http.get_emojis and http.create_emoji to accomplish this in bot setup. Then get the id of the emojis and store them as public consts.
         if &slice == &"<p>" || &slice == &"<p class=\"fancy\">" || slice.contains("/h3") {
             new_slice = "\n";
         } else if &slice == &"</section>" {
@@ -151,6 +152,8 @@ async fn sanitize(sanitize_me: &str) -> Result<String, Box<dyn std::error::Error
     return Ok(return_string)
 }
 
+/// pretty_format Makes some further alterations to strings for the embed. 
+/// It does things liks split up types of items and add some line breaks to make spell outcomes easier to read
 async fn pretty_format(mut string_to_format: String) -> Result<String, Box<dyn std::error::Error>> {
     string_to_format = str::replace(&string_to_format, "\nType", "\n\nType");
     string_to_format = str::replace(&string_to_format, "**Critical Success**", "\n\n**Critical Success**");
@@ -230,7 +233,7 @@ async fn build_embed(result: &Vec<String>) -> Result<Embed, Box<dyn std::error::
         description = pretty_format(description).await?;
 
         if &init_description.len() > &2047 {
-            description = format!("{}{}", &init_description[..2019], "... click the title for more");
+            description = format!("{}...[more]({})", &init_description[..1991], req_url);
         } else {
             description = init_description;
         }
@@ -259,7 +262,7 @@ async fn build_embed(result: &Vec<String>) -> Result<Embed, Box<dyn std::error::
             description_value = pretty_format(description_value).await?;
             println!("DESCRIPTION: {}", description_value);
             if &description_value.len() > &2047 {
-                description = format!("{}{}", &description_value[..2019], "... click the title for more");
+                description = format!("{}...[more]({})", &description_value[..1991], req_url);
             } else {
                 description = description_value;
             }
@@ -274,7 +277,7 @@ async fn build_embed(result: &Vec<String>) -> Result<Embed, Box<dyn std::error::
         let embed = Embed {
             author: None,
             color: Some(12009742),
-            description: Some(description.to_string()), //emoji can be placed in here as :emoji_name: "Something &lt;strong>bold</strong> here"
+            description: Some(description.to_string()), //Uses discord markdown :emoji: **bold** _italic_ __underline__ and ***bold italic***
             fields: fields_vec,
             footer: None,
             image: None,
