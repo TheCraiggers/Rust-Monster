@@ -127,6 +127,14 @@ async fn sanitize(sanitize_me: &str) -> Result<String, Box<dyn std::error::Error
             new_slice = "\n";
         } else if &slice == &"</section>" {
             new_slice = "\n------------";
+        } else if &slice == &"<strong>" {
+            new_slice = " **";
+        } else if &slice == &"</strong>" {
+            new_slice = "** ";
+        } else if &slice == &"<em>" {
+            new_slice = " _";
+        } else if &slice == &"</em>" {
+            new_slice = "_ ";
         } else if slice.contains("class=\"pf2 action1\"") {
             new_slice = " :one: ";
         } else if slice.contains("class=\"pf2 action2\"") {
@@ -145,10 +153,10 @@ async fn sanitize(sanitize_me: &str) -> Result<String, Box<dyn std::error::Error
 
 async fn pretty_format(mut string_to_format: String) -> Result<String, Box<dyn std::error::Error>> {
     string_to_format = str::replace(&string_to_format, "\nType", "\n\nType");
-    string_to_format = str::replace(&string_to_format, ". Critical Success", ".\n\nCritical Success");
-    string_to_format = str::replace(&string_to_format, ". Success", ".\n\nSuccess");
-    string_to_format = str::replace(&string_to_format, ". Failure", ".\n\nFailure");
-    string_to_format = str::replace(&string_to_format, ". Critical Failure", ".\n\nCritical Failure");
+    string_to_format = str::replace(&string_to_format, "**Critical Success**", "\n\n**Critical Success**");
+    string_to_format = str::replace(&string_to_format, "**Success**", "\n\n**Success**");
+    string_to_format = str::replace(&string_to_format, "**Failure**", "\n\n**Failure**");
+    string_to_format = str::replace(&string_to_format, "**Critical Failure**", "\n\n**Critical Failure**");
     return Ok(string_to_format)
 }
 
@@ -249,7 +257,7 @@ async fn build_embed(result: &Vec<String>) -> Result<Embed, Box<dyn std::error::
             //Update description to have the detail from the details
             let mut description_value = sanitize(&details_string).await?;
             description_value = pretty_format(description_value).await?;
-            //println!("DESCRIPTION: {}", description_value);
+            println!("DESCRIPTION: {}", description_value);
             if &description_value.len() > &2047 {
                 description = format!("{}{}", &description_value[..2019], "... click the title for more");
             } else {
