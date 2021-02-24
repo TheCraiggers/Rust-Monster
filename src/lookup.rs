@@ -237,6 +237,10 @@ async fn build_embed(result: &Vec<String>) -> Result<Embed, Box<dyn std::error::
             name: "Empty".to_owned(),
             value: "Empty".to_owned()
         };
+        if &response_string.find("class=\"content\"").unwrap_or(0) != &0 {
+            let another_description = split_string(&response_string, "class=\"content\">", "</section>\n\t\t\t<footer class").await?;
+            description = sanitize(&another_description).await?;
+        }
 
         if &response_string.find("class=\'traits\'>").unwrap_or(0) != &0 {
             let traits_string = split_string(&response_string, "class=\'traits\'>", "</section>\n\t\t\t\t<section class=\'details\'>").await?;
