@@ -6,6 +6,7 @@ use anyhow::{Result};
 use convert_case::{Case, Casing};
 use reqwest;
 
+const max_results: i8 = 5;
 //TODO: Abstract the discord api methods. Like "build_embed_from_struct" and "send_text_message" and "send_embed_message"
 pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String) -> Result<(), Box<dyn std::error::Error>> {
     let search_results = search_for_term(&keyword).await?;
@@ -95,11 +96,10 @@ async fn sanitize(sanitize_me: &str) -> Result<String, Box<dyn std::error::Error
         let mut open_count = 1;
         let mut close_count = 0;
         let mut byte_count = start_byte+1;
-
         loop {
             if temp_string.find("<") == None || temp_string.find(">") == None {
                 if temp_string.find(">") != None {
-                    end_byte = return_string.find(">").unwrap()+1;
+                    end_byte = return_string.rfind(">").unwrap()+1;
                 } else{
                 end_byte = byte_count;
                 }
@@ -195,7 +195,7 @@ async fn search_for_term(term: &str) -> Result<Vec<String>, Box<dyn std::error::
                 search_results.push(one_result);
             }
             i+=1;
-            if i > 3 {
+            if i > max_results {
                 println!("to Cancel.");
                 break;
             }
@@ -222,6 +222,7 @@ async fn build_embed(result: &Vec<String>) -> Result<Embed, Box<dyn std::error::
     //Check the response for a success
     if response.status().is_success() {
         let response_string: String = response.text().await?;
+        //println!("{:#?}", response_string);
         //Get title
         let title = extract_info(&result).await?
             .to_case(Case::Upper);
@@ -229,14 +230,7 @@ async fn build_embed(result: &Vec<String>) -> Result<Embed, Box<dyn std::error::
         let init_description = split_string(&response_string, "description\' content=\'", "\' />").await?;
         //Chop the length of the description if it is too large for the embed
         let mut description: String = "Description Placeholder".to_string();
-        //Pretty format for success/failure conditions.
-        description = pretty_format(description).await?;
-
-        if &init_description.len() > &2047 {
-            description = format!("{}...[more]({})", &init_description[..1991], req_url);
-        } else {
-            description = init_description;
-        }
+        description = init_description;
         //If traits exist, get the traits, otherwise send an empty struct
         let mut traits = EmbedField {
             inline: true,
@@ -246,7 +240,11 @@ async fn build_embed(result: &Vec<String>) -> Result<Embed, Box<dyn std::error::
 
         if &response_string.find("class=\'traits\'>").unwrap_or(0) != &0 {
             let traits_string = split_string(&response_string, "class=\'traits\'>", "</section>\n\t\t\t\t<section class=\'details\'>").await?;
-            let traits_value = sanitize(&traits_string).await?;
+            let mut traits_value = sanitize(&traits_string).await?;
+            if traits_value.find("\n\n").unwrap_or(0) != 0 {
+                let end_traits = traits_value.find("\n\n").unwrap();
+                traits_value = traits_value[..end_traits].to_string();
+            }
             //println!("TRAITS: {}", &traits_value);
             traits = EmbedField {
                 inline: true,
@@ -258,20 +256,18 @@ async fn build_embed(result: &Vec<String>) -> Result<Embed, Box<dyn std::error::
         if &response_string.find("class=\'details\'>").unwrap_or(0) != &0 {
             let details_string = split_string(&response_string, "class=\'details\'>", "</section>\n\t\t\t<footer class").await?;
             //Update description to have the detail from the details
-            let mut description_value = sanitize(&details_string).await?;
-            description_value = pretty_format(description_value).await?;
-            println!("DESCRIPTION: {}", description_value);
-            if &description_value.len() > &2047 {
-                description = format!("{}...[more]({})", &description_value[..1991], req_url);
-            } else {
-                description = description_value;
-            }
+            description = sanitize(&details_string).await?;
         }
-        //println!("{:#?}", response_string);
         //Build fields
         let mut fields_vec: Vec<EmbedField> = [].to_vec();
         if traits.name != "Empty" {
             fields_vec = vec![traits];
+        }
+
+        //Pretty format for success/failure conditions.
+        description = pretty_format(description).await?;
+        if &description.len() > &2048 {
+            description = format!("{}...[more]({})", &description[..1991], req_url);
         }
 
         let embed = Embed {
