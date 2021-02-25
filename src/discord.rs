@@ -17,7 +17,10 @@ use reqwest;
 use futures;
 
 pub const BOT_DATA_CHANNEL_CATEGORY_NAME: &str = "rust-monster-bot-data";
-pub const BOT_DATA_CHANNEL_NAME: &str = "omni-bot-data"; //This variable and string also exist in main.rs. If an update is made, it needs to be made there too.
+pub const BOT_DATA_CHANNEL_NAME: &str = "omni-bot-data";
+
+//Vec Mutex to hold all the Boxed Mutexes holding the trackers. Look for a dict so I can reference by guild id.
+
 
 /// The standard amount of info that all discord functions take.
 pub struct DiscordReferences<'a> {
@@ -64,7 +67,9 @@ pub async fn create_omni_data_channel(DiscordReferences { http, msg }: &DiscordR
 }
 
 pub async fn get_omni_data_channel(discord_references: &DiscordReferences<'_>) -> Result<GuildChannel> {
+    println!("Inside save.");
     let guild_channels = discord_references.http.guild_channels(discord_references.msg.guild_id.expect("Could not get guild ID!")).await?;
+
     match guild_channels.iter().find(|&channel| channel.name() == BOT_DATA_CHANNEL_NAME) {
         Some(channel) => {
             println!("Found the bot channel!");
@@ -81,13 +86,13 @@ pub async fn get_omni_data_channel(discord_references: &DiscordReferences<'_>) -
 /// Save the omni data to the discord guild to preserve state between bot commands.
 /// This also takes care of pinning the new message and unpinning all others.
 /// Will only do anything if the omnidata object is dirty.
-pub async fn omni_data_save(discord_references: &DiscordReferences<'_>, omnidata: omni::Omnidata) -> Result<()> {
+pub async fn omni_data_save(discord_references: &DiscordReferences<'_>, omnidata: &omni::Omnidata) -> Result<()> {
     let serialized = serde_json::to_vec(&omnidata)?;
     let data_channel = get_omni_data_channel(&discord_references).await?;
     let new_message = discord_references.http.create_message(data_channel.id())
         .attachment("state", serialized)    
         .content(format!("'{}'", &discord_references.msg.content))?.await?;
-
+    
     // The bot relies on a message being pinned in the data channel to know which one is the 'active' one. Unpin the old one, then pin the new one.
     let mut pin_jobs = Vec::new();
     let old_pins = discord_references.http.pins(new_message.channel_id).await?;
@@ -101,7 +106,7 @@ pub async fn omni_data_save(discord_references: &DiscordReferences<'_>, omnidata
 }
 
 /// Given a discord ref struct, find the current omni tracker data, deserialize it, and return a usable object
-pub async fn construct_tracker(discord_refs: &DiscordReferences<'_>) -> Result<Omnidata> {
+pub async fn get_tracker(discord_refs: &DiscordReferences<'_>) -> Result<Omnidata> {
     let data_channel = get_omni_data_channel(discord_refs).await?;
     let messages = discord_refs.http.channel_messages(data_channel.id()).await;
     let pins = discord_refs.http.pins(data_channel.id()).await?;
@@ -109,15 +114,9 @@ pub async fn construct_tracker(discord_refs: &DiscordReferences<'_>) -> Result<O
     match pins.len() {
         0 => return Ok(omni::create_empty_omnidata()),
         _ => {
-            // TODO: Figure out a clever way to deal with race conditions that lead to more than one
-            // active data entry at one time. For now, just load the latest (or whatever is in index 0)
             let data = reqwest::get(&pins[0].attachments[0].url).await?.text().await?;
             let omnidata: Omnidata = serde_json::from_str(&data)?;
             return Ok(omnidata);
         },
     }
-    // First time the bot has run. Create an empty omni object for now.
-
-
-    //println!("{:?}", messages);
 }
