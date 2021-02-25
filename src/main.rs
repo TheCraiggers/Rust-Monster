@@ -93,7 +93,7 @@ async fn handle_message(
 
     match parser.parse(&msg.content) {
         Some(Command { name: "omni", arguments, .. }) => {
-            omni::handle_command(&discord_refs, Arc::clone(&omnidata_cache)).await?;
+            omni::handle_command(&discord_refs, Arc::clone(&omnidata_cache), arguments.as_str()).await?;
         },
         Some(Command { name: "lookup", arguments, .. }) => {
             &lookup::lookup(&http, &msg, arguments.as_str().to_string()).await;

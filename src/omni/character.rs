@@ -16,3 +16,7 @@ pub struct Character {
     pub owner: String,
     pub effects: Vec<Effect>,
 }
+
+impl Character {
+    
+}

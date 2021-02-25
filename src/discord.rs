@@ -67,7 +67,6 @@ pub async fn create_omni_data_channel(DiscordReferences { http, msg }: &DiscordR
 }
 
 pub async fn get_omni_data_channel(discord_references: &DiscordReferences<'_>) -> Result<GuildChannel> {
-    println!("Inside save.");
     let guild_channels = discord_references.http.guild_channels(discord_references.msg.guild_id.expect("Could not get guild ID!")).await?;
 
     match guild_channels.iter().find(|&channel| channel.name() == BOT_DATA_CHANNEL_NAME) {
@@ -87,22 +86,27 @@ pub async fn get_omni_data_channel(discord_references: &DiscordReferences<'_>) -
 /// This also takes care of pinning the new message and unpinning all others.
 /// Will only do anything if the omnidata object is dirty.
 pub async fn omni_data_save(discord_references: &DiscordReferences<'_>, omnidata: &omni::Omnidata) -> Result<()> {
-    let serialized = serde_json::to_vec(&omnidata)?;
-    let data_channel = get_omni_data_channel(&discord_references).await?;
-    let new_message = discord_references.http.create_message(data_channel.id())
-        .attachment("state", serialized)    
-        .content(format!("'{}'", &discord_references.msg.content))?.await?;
-    
-    // The bot relies on a message being pinned in the data channel to know which one is the 'active' one. Unpin the old one, then pin the new one.
-    let mut pin_jobs = Vec::new();
-    let old_pins = discord_references.http.pins(new_message.channel_id).await?;
-    for old_pin in old_pins.iter() {
-        pin_jobs.push(discord_references.http.delete_pin(old_pin.channel_id, old_pin.id));
+    if omnidata.is_dirty {
+        let serialized = serde_json::to_vec(&omnidata)?;
+        let data_channel = get_omni_data_channel(&discord_references).await?;
+        let new_message = discord_references.http.create_message(data_channel.id())
+            .attachment("state", serialized)    
+            .content(format!("'{}'", &discord_references.msg.content))?.await?;
+        
+        // The bot relies on a message being pinned in the data channel to know which one is the 'active' one. Unpin the old one, then pin the new one.
+        // TODO: Pinning API is STUPID SLOW. Find a better way, like using the newest message.
+        let mut pin_jobs = Vec::new();
+        let old_pins = discord_references.http.pins(new_message.channel_id).await?;
+        for old_pin in old_pins.iter() {
+            pin_jobs.push(discord_references.http.delete_pin(old_pin.channel_id, old_pin.id));
+        }
+        let delete_jobs = futures::future::join_all(pin_jobs);
+        let foo = discord_references.http.create_pin(new_message.channel_id, new_message.id);
+        futures::join!(delete_jobs, foo);
+        return Ok(());
+    } else {
+        return Ok(());
     }
-    let delete_jobs = futures::future::join_all(pin_jobs);
-    let foo = discord_references.http.create_pin(new_message.channel_id, new_message.id);
-    futures::join!(delete_jobs, foo);
-    return Ok(());
 }
 
 /// Given a discord ref struct, find the current omni tracker data, deserialize it, and return a usable object
@@ -112,7 +116,7 @@ pub async fn get_tracker(discord_refs: &DiscordReferences<'_>) -> Result<Omnidat
     let pins = discord_refs.http.pins(data_channel.id()).await?;
 
     match pins.len() {
-        0 => return Ok(omni::create_empty_omnidata()),
+        0 => return Ok(omni::Omnidata::new()),
         _ => {
             let data = reqwest::get(&pins[0].attachments[0].url).await?.text().await?;
             let omnidata: Omnidata = serde_json::from_str(&data)?;
