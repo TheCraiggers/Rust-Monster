@@ -6,7 +6,8 @@ use anyhow::{Result};
 use convert_case::{Case, Casing};
 use reqwest;
 
-const max_results: i8 = 5;
+const MAX_RESULTS: i8 = 5; //Number of ambiguous results to show: up to 9
+
 //TODO: Abstract the discord api methods. Like "build_embed_from_struct" and "send_text_message" and "send_embed_message"
 pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String) -> Result<(), Box<dyn std::error::Error>> {
     let search_results = search_for_term(&keyword).await?;
@@ -32,22 +33,34 @@ pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String
         //Add cancel option
         options_string = format!("{}\n[{}] Cancel", options_string, search_results.len()+1);
 
-        http.create_message(msg.channel_id).reply(msg.id).content(format!("Found more than one possible term. Please let me know which one to look up by simply responding with the number shown beside the desired choice.\n{}", options_string))?.await?;
+        let clarification = http.create_message(msg.channel_id).reply(msg.id).content(format!("Found more than one possible term. Please let me know which one to look up by simply responding with the number shown beside the desired choice.\n{}", options_string))?.await?;
+        //STUBBED IN. TODO
+        let decision = http.create_message(msg.channel_id).reply(msg.id).content(format!("1"))?.await?;
         let standby = Standby::new();
-        let message = msg.to_owned();
-        let decision = standby.wait_for_message(message.channel_id, move |event: &MessageCreate| {
-            event.author.id == message.author.id && (event.content == "1" || event.content == "2" || event.content == "3" || event.content == "4")
-        }).await?;
+        //let message = msg.to_owned();
+
+        //let decision = standby.wait_for_message(message.channel_id, move |event: &MessageCreate| {
+        //    event.author.id == message.author.id && (event.content == "1" || event.content == "2" || event.content == "3" || event.content == "4")
+        //}).await?;
         println!("DECISION? {:?}", decision);
         //Convert user choice to usize, then respond with choice
-        let user_response = decision.content.parse::<usize>().unwrap();
-        if user_response == search_results.len()+1 {
+        let mut user_response: usize = 10;
+        if decision.content.parse::<usize>().is_err() {
+            user_response = search_results.len()+1;
+        } else {
+            user_response = decision.content.parse::<usize>().unwrap();
+        }
+        if user_response > search_results.len() || user_response < 1 {
+            http.delete_message(msg.channel_id, clarification.id).await?;
+            http.delete_message(msg.channel_id, decision.id).await?;
             println!("Canceled");
         } else {
             println!("Do something");
-            let response_string = &search_results[user_response];
+            let response_string = &search_results[user_response-1];
             let mut response_vec: Vec<String> = Vec::new();
             response_vec.push(response_string.to_string());
+            http.delete_message(msg.channel_id, clarification.id).await?;
+            http.delete_message(msg.channel_id, decision.id).await?;
             let embed = build_embed(&response_vec).await?;
             http.create_message(msg.channel_id).reply(msg.id).embed(embed)?.await?;
         }
@@ -195,8 +208,7 @@ async fn search_for_term(term: &str) -> Result<Vec<String>, Box<dyn std::error::
                 search_results.push(one_result);
             }
             i+=1;
-            if i > max_results {
-                println!("to Cancel.");
+            if i > MAX_RESULTS {
                 break;
             }
         }
