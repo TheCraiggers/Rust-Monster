@@ -55,3 +55,22 @@ pub async fn handle_command(
     println!("Actually done saving.");
     return Ok(());
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_omnidata() {
+        let omnidata = Omnidata::new();
+        assert_eq!(omnidata.version, OMNI_VERSION);
+    }
+    
+    #[test]
+    fn dirty_omnidata() {
+        let mut omnidata = Omnidata::new();
+        assert_eq!(omnidata.is_dirty, false);
+        omnidata.dirty();
+        assert_eq!(omnidata.is_dirty, true);
+    }
+}
