@@ -17,6 +17,16 @@ use std::sync::Arc;
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let token = env::var("DISCORD_TOKEN")?;
     let mut omnidataCache: HashMap<GuildId, Arc<Mutex<Omnidata>>> = HashMap::new();
+    
+    // Create the commands the bot will listen for
+    let mut config = CommandParserConfig::new();
+    config.add_prefix("!");
+    config.add_prefix("! ");    //For mobile users like me. Android puts a space after ! because it's punctuation
+    config.add_command("omni", false);
+    config.add_command("lookup", false);
+    let parser = Parser::new(config);
+    
+    //Useful for Discord debugging if DEBUG=true.
     tracing_subscriber::fmt::init();
 
     // This is the default scheme. It will automatically create as many
@@ -60,7 +70,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     let discord_refs: DiscordReferences = DiscordReferences {http: &http, msg: &msg};
                     omnidataCache.insert(guild_id, Arc::new(Mutex::new(discord::get_tracker(&discord_refs).await?)));
                 }
-                tokio::spawn(handle_message(http.clone(),Arc::clone(omnidataCache.get(&guild_id).expect("Expected to find omnidata in hash!")), msg)).await?;
+                tokio::spawn(handle_message(http.clone(),Arc::clone(omnidataCache.get(&guild_id).expect("Expected to find omnidata in hash!")), msg, parser.clone())).await?;
                 
                 
             }
@@ -77,18 +87,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
 async fn handle_message(
     http: HttpClient,
-    //discord_refs: DiscordReferences<'_>,
     omnidata_cache: Arc<Mutex<Omnidata>>,
     msg: Box<MessageCreate>,
+    parser: Parser<'_>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    // Create the commands the bot will listen for
-    // TODO: Move this to the parent function. No point in recreating the parser object each time.
-    let mut config = CommandParserConfig::new();
-    config.add_prefix("!");
-    config.add_prefix("! ");    //For mobile users like me. Android puts a space after ! because it's punctuation
-    config.add_command("omni", false);
-    config.add_command("lookup", false);
-    let parser = Parser::new(config);
     let discord_refs: DiscordReferences = DiscordReferences {http: &http, msg: &msg};
 
     match parser.parse(&msg.content) {
