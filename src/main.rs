@@ -1,11 +1,11 @@
-use std::{borrow::Borrow, env, error::Error};
+use std::{env, error::Error};
 use discord::DiscordReferences;
 use futures::{lock::Mutex, stream::StreamExt};
 use omni::Omnidata;
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 use twilight_gateway::{cluster::{Cluster, ShardScheme}, Event};
 use twilight_http::Client as HttpClient;
-use twilight_model::{channel::{GuildChannel, Message, ChannelType::GuildCategory}, gateway::{Intents, payload::MessageCreate}, guild::Guild, id::GuildId};
+use twilight_model::{gateway::{Intents, payload::MessageCreate}, id::GuildId};
 use twilight_command_parser::{Command, CommandParserConfig, Parser};
 mod omni;
 mod lookup;
@@ -16,7 +16,7 @@ use std::sync::Arc;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let token = env::var("DISCORD_TOKEN")?;
-    let mut omnidataCache: HashMap<GuildId, Arc<Mutex<Omnidata>>> = HashMap::new();
+    let mut omnidata_cache: HashMap<GuildId, Arc<Mutex<Omnidata>>> = HashMap::new();
     
     // Create the commands the bot will listen for
     let mut config = CommandParserConfig::new();
@@ -66,13 +66,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         match event {
             Event::MessageCreate(msg) => {
                 let guild_id = msg.guild_id.expect("WTF, no guild ID in message!");
-                if !omnidataCache.contains_key(&guild_id) {
+                if !omnidata_cache.contains_key(&guild_id) {
                     let discord_refs: DiscordReferences = DiscordReferences {http: &http, msg: &msg};
-                    omnidataCache.insert(guild_id, Arc::new(Mutex::new(discord::get_tracker(&discord_refs).await?)));
+                    omnidata_cache.insert(guild_id, Arc::new(Mutex::new(discord::get_tracker(&discord_refs).await?)));
                 }
-                tokio::spawn(handle_message(http.clone(),Arc::clone(omnidataCache.get(&guild_id).expect("Expected to find omnidata in hash!")), msg, parser.clone())).await?;
-                
-                
+                tokio::spawn(handle_message(http.clone(),Arc::clone(omnidata_cache.get(&guild_id).expect("Expected to find omnidata in hash!")), msg, parser.clone())).await?;
             }
             Event::ShardConnected(_) => {
                 println!("Connected on shard {}", shard_id);

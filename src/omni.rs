@@ -1,10 +1,10 @@
 mod character;
 use crate::{discord, omni::character::Character};
 use serde::{Deserialize, Serialize};
-use crate::discord::{DiscordReferences, *};
+use crate::discord::{DiscordReferences};
 use anyhow::{Result};
 use std::{sync::Arc, u16};
-use futures::{executor::block_on, lock::Mutex};
+use futures::{lock::Mutex};
 
 const OMNI_VERSION: u16 = 0;
 
