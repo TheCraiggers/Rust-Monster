@@ -4,14 +4,10 @@
 //! This way, if the library ever needed to be switched, or if a breaking change was introduced, we could simply
 //! update the code here and all of the calling functions would be ignorant.
 
-use std::convert::TryInto;
-
 use omni::{Omnidata};
 use twilight_http::Client as HttpClient;
 use twilight_model::{channel::{GuildChannel, ChannelType::GuildCategory}, gateway::{payload::MessageCreate}};
-use anyhow::{Context, Result, anyhow};
-use serde_json::json;
-use serde::{Deserialize, Serialize};
+use anyhow::{Context, Result};
 use crate::omni;
 use reqwest;
 use futures;
@@ -112,7 +108,6 @@ pub async fn omni_data_save(discord_references: &DiscordReferences<'_>, omnidata
 /// Given a discord ref struct, find the current omni tracker data, deserialize it, and return a usable object
 pub async fn get_tracker(discord_refs: &DiscordReferences<'_>) -> Result<Omnidata> {
     let data_channel = get_omni_data_channel(discord_refs).await?;
-    let messages = discord_refs.http.channel_messages(data_channel.id()).await;
     let pins = discord_refs.http.pins(data_channel.id()).await?;
 
     match pins.len() {
