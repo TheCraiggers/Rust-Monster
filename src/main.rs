@@ -12,6 +12,7 @@ mod lookup;
 pub mod discord;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -48,7 +49,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     });
 
     // HTTP is separate from the gateway, so create a new client.
-    let http = HttpClient::new(&token);
+    //let http = HttpClient::new(&token);
+    let http = HttpClient::builder()
+        .token(&token)
+        .timeout(Duration::from_secs(30))   
+        .build();
 
     // Since we only care about new messages, make the cache only
     // cache new messages.
@@ -68,7 +73,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 let guild_id = msg.guild_id.expect("WTF, no guild ID in message!");
                 if !omnidata_cache.contains_key(&guild_id) {
                     let discord_refs: DiscordReferences = DiscordReferences {http: &http, msg: &msg};
-                    omnidata_cache.insert(guild_id, Arc::new(Mutex::new(discord::get_tracker(&discord_refs).await?)));
+                    let tracker = discord::get_tracker(&discord_refs).await?;
+                    omnidata_cache.insert(guild_id, Arc::new(Mutex::new(tracker)));
                 }
                 tokio::spawn(handle_message(http.clone(),Arc::clone(omnidata_cache.get(&guild_id).expect("Expected to find omnidata in hash!")), msg, parser.clone())).await?;
             }
@@ -93,7 +99,14 @@ async fn handle_message(
 
     match parser.parse(&msg.content) {
         Some(Command { name: "omni", arguments, .. }) => {
-            omni::handle_command(&discord_refs, Arc::clone(&omnidata_cache), arguments.as_str()).await?;
+            match omni::handle_command(&discord_refs, Arc::clone(&omnidata_cache), arguments.as_str()).await {
+                Err(error) => {
+                    println!("Command failed with error: {:?}", error);
+                },
+                Ok(_) => {
+                    println!("Command successful");
+                },
+            }
         },
         Some(Command { name: "lookup", arguments, .. }) => {
             &lookup::lookup(&http, &msg, arguments.as_str().to_string()).await;

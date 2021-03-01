@@ -6,11 +6,12 @@
 
 use omni::{Omnidata};
 use twilight_http::Client as HttpClient;
-use twilight_model::{channel::{GuildChannel, ChannelType::GuildCategory}, gateway::{payload::MessageCreate}};
-use anyhow::{Context, Result};
+use twilight_model::{channel::{ChannelType::GuildCategory, GuildChannel, Message}, gateway::{payload::MessageCreate}};
+use anyhow::{Context, Result, anyhow};
 use crate::omni;
 use reqwest;
 use futures;
+use core::mem::size_of_val;
 
 pub const BOT_DATA_CHANNEL_CATEGORY_NAME: &str = "rust-monster-bot-data";
 pub const BOT_DATA_CHANNEL_NAME: &str = "omni-bot-data";
@@ -72,8 +73,9 @@ pub async fn get_omni_data_channel(discord_references: &DiscordReferences<'_>) -
         }
         None => {
             //Do setup
+            let new_channel = create_omni_data_channel(&discord_references, &guild_channels).await?;
             discord_references.http.create_message(discord_references.msg.channel_id).reply(discord_references.msg.id).content(format!("Bot setup complete."))?.await?;
-            return Ok(create_omni_data_channel(&discord_references, &guild_channels).await?.to_owned());
+            Ok(new_channel)
         }
     }
 }
@@ -84,22 +86,28 @@ pub async fn get_omni_data_channel(discord_references: &DiscordReferences<'_>) -
 pub async fn omni_data_save(discord_references: &DiscordReferences<'_>, omnidata: &omni::Omnidata) -> Result<()> {
     if omnidata.is_dirty {
         let serialized = serde_json::to_vec(&omnidata)?;
+        println!("Size of vec is: {:?}", size_of_val(&*serialized));
         let data_channel = get_omni_data_channel(&discord_references).await?;
-        let new_message = discord_references.http.create_message(data_channel.id())
-            .attachment("state", serialized)    
-            .content(format!("'{}'", &discord_references.msg.content))?.await?;
-        
-        // The bot relies on a message being pinned in the data channel to know which one is the 'active' one. Unpin the old one, then pin the new one.
-        // TODO: Pinning API is STUPID SLOW. Find a better way, like using the newest message.
-        let mut pin_jobs = Vec::new();
-        let old_pins = discord_references.http.pins(new_message.channel_id).await?;
-        for old_pin in old_pins.iter() {
-            pin_jobs.push(discord_references.http.delete_pin(old_pin.channel_id, old_pin.id));
-        }
-        let delete_jobs = futures::future::join_all(pin_jobs);
-        let foo = discord_references.http.create_pin(new_message.channel_id, new_message.id);
-        futures::join!(delete_jobs, foo);
-        return Ok(());
+        match discord_references.http.create_message(data_channel.id()).attachment("state", serialized).content(format!("'{}'", &discord_references.msg.content))?.await {
+            Err(error) => {
+                println!("Error when saving bot data. {:?}", error);
+                discord_references.http.create_message(discord_references.msg.channel_id).content("Something went wrong saving the bot data. Rolling back the previous command!")?.await?;
+                return Err(anyhow!(error.to_string()));
+            },
+            Ok(new_message) => {
+                // The bot relies on a message being pinned in the data channel to know which one is the 'active' one. Unpin the old one, then pin the new one.
+                // TODO: Pinning API is STUPID SLOW. Find a better way, like using the newest message.
+                let mut pin_jobs = Vec::new();
+                let old_pins = discord_references.http.pins(new_message.channel_id).await?;
+                for old_pin in old_pins.iter() {
+                    pin_jobs.push(discord_references.http.delete_pin(old_pin.channel_id, old_pin.id));
+                }
+                let delete_jobs = futures::future::join_all(pin_jobs);
+                let foo = discord_references.http.create_pin(new_message.channel_id, new_message.id);
+                futures::join!(delete_jobs, foo);
+                return Ok(());
+             },
+        };
     } else {
         return Ok(());
     }

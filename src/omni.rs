@@ -2,9 +2,9 @@ mod character;
 use crate::{discord, omni::character::Character};
 use serde::{Deserialize, Serialize};
 use crate::discord::{DiscordReferences};
-use anyhow::{Result};
+use anyhow::{Result, anyhow};
 use std::{sync::Arc, u16};
-use futures::{lock::Mutex};
+use futures::{TryFutureExt, lock::Mutex};
 
 const OMNI_VERSION: u16 = 0;
 
@@ -43,17 +43,27 @@ pub async fn handle_command(
     discord_refs: &DiscordReferences<'_>, 
     omnidata_cache: Arc<Mutex<Omnidata>>,
     arguments: &str,
-) -> Result<()> {
-    //let mut omnidata = construct_tracker(&discord_refs).await?;
+) -> anyhow::Result<()> {
+    
+    // Lock the cached botdata. This should prevent any othe commands from being run on this guild
     let mut omnidata = omnidata_cache.lock().await;
-    //println!("Before: {:#?}", omnidata);
-    omnidata.add_character("me");
-    //println!("After: {:#?}", omnidata);
-    let reply_msg = discord_refs.http.create_message(discord_refs.msg.channel_id).reply(discord_refs.msg.id).content(format!("This is your reply for {}", arguments))?;
+
+    // Do whatever the user requested us to do
+    for foo in 1..9000 {
+        omnidata.add_character("me");
+    }
+    let reply_msg = discord_refs.http.create_message(discord_refs.msg.channel_id).reply(discord_refs.msg.id).content(format!("This is your reply for {}", arguments))?.map_err(|e| anyhow!("Problem creating reply!"));
     let save = discord::omni_data_save(&discord_refs, &omnidata);
-    futures::join!(reply_msg, save);
-    println!("Actually done saving.");
-    return Ok(());
+    match futures::try_join!(reply_msg, save) {
+        Ok((r,s)) => {
+            println!("Actually done saving.");
+            return Ok(());
+        },
+        Err(e) => {
+            println!("Save failed with error: {:?}", e.to_string());
+            return Err(anyhow!("Save failed with error: {:?}", e.to_string()));
+        }
+    }
 }
 
 #[cfg(test)]
