@@ -1,7 +1,6 @@
 use twilight_http:: {Client as HttpClient, request::channel::reaction::RequestReactionType};
 use twilight_model::gateway::{payload::MessageCreate, payload::ReactionAdd};
 use twilight_model::channel::{embed::{Embed, EmbedField}, ReactionType};
-use twilight_standby::Standby;
 use anyhow::{Result};
 use convert_case::{Case, Casing};
 use futures::stream::StreamExt;
@@ -12,8 +11,9 @@ const REACTIONS: [&str; 5] = ["\u{0031}\u{20E3}", "\u{0032}\u{20E3}", "\u{0033}\
 const CANCEL: &str = "\u{274C}"; //Unicode for the red X
 
 //TODO: Abstract the discord api methods. Like "build_embed_from_struct" and "send_text_message" and "send_embed_message"
+///Lookup accepts an HttpClient, MessageCreate, and keyword String then outputs a boolean. A "true" output means that the lookup has returned it's result. A "false" output means that it has returned too many results and needs user interaction.
 pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String) -> Result<(), Box<dyn std::error::Error>> {
-    http.create_typing_trigger(msg.channel_id);
+    http.create_typing_trigger(msg.channel_id).await;
     let search_results = search_for_term(&keyword).await?;
     if &search_results.len() == &0 {
         //Can't find any results. Alert user and get out of this function.
@@ -21,12 +21,11 @@ pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String
         return Ok(());
     } else if &search_results.len() == &1 {
         //Exact match! Start building the embed and send a response
-        println!("Exact match! {:?}", &search_results);
         let embed = build_embed(&search_results).await?;
         http.create_message(msg.channel_id).reply(msg.id).embed(embed)?.await?;
+        return Ok(());
     } else {
         //Ambiguous. Ask user which of the short list they mean.
-        println!("A lot of matches {:?}", &search_results);
         let mut options_string: String = String::from("");
         for option in 0..search_results.len() {
             let mut named_option = Vec::new();
@@ -45,21 +44,9 @@ pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String
         }
         //React with CANCEL
         http.create_reaction(clarification.channel_id, clarification.id, RequestReactionType::Unicode {name: CANCEL.to_string()} ).await?;
-        //Wait for user to react
-        let standby = Standby::new();
-        let mut decision = standby.wait_for_reaction_stream(clarification.id, |event: &ReactionAdd| {
-            matches!(&event.emoji, ReactionType::Unicode { name } if name == "\u{0031}\u{20E3}")
-        });
-
+        return Ok(());
         //STUBBED IN. TODO
         /**
-        let decision = http.create_message(msg.channel_id).reply(msg.id).content(format!("1"))?.await?;
-        //let message = msg.to_owned();
-
-        //let decision = standby.wait_for_message(message.channel_id, move |event: &MessageCreate| {
-        //    event.author.id == message.author.id && (event.content == "1" || event.content == "2" || event.content == "3" || event.content == "4")
-        //}).await?;
-        //println!("DECISION? {:?}", decision);
         //Convert user choice to usize, then respond with choice
         let mut user_response: usize = 10;
         if decision.content.parse::<usize>().is_err() {
@@ -84,7 +71,6 @@ pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String
         */
         println!("Hey-o");
     }
-    Ok(())
 }
 
 ///extract_id splits a result and extracts the id to be used later
@@ -156,7 +142,7 @@ async fn sanitize(sanitize_me: &str) -> Result<String, Box<dyn std::error::Error
         let mut new_slice = "";
         //TODO: use custom emojis like https://github.com/Rapptz/discord.py/issues/390 instead of :one:, :two:, etc.
         //Use http.get_emojis and http.create_emoji to accomplish this in bot setup. Then get the id of the emojis and store them as public consts.
-        if &slice == &"<p>" || &slice == &"<p class=\"fancy\">" || slice.contains("/h3") {
+        if &slice == &"<p>" || &slice == &"<p class=\"fancy\">" || slice.contains("/h3") || &slice == &"<tr>" {
             new_slice = "\n";
         } else if &slice == &"</section>" {
             new_slice = "\n------------";
@@ -168,6 +154,8 @@ async fn sanitize(sanitize_me: &str) -> Result<String, Box<dyn std::error::Error
             new_slice = " _";
         } else if &slice == &"</em>" {
             new_slice = "_ ";
+        } else if &slice == &"</th>" || &slice == &"</td>" {
+            new_slice = "|";
         } else if slice.contains("class=\"pf2 action1\"") {
             new_slice = " :one: ";
         } else if slice.contains("class=\"pf2 action2\"") {
