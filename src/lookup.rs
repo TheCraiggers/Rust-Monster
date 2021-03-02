@@ -1,15 +1,19 @@
-use twilight_http::Client as HttpClient;
-use twilight_model::gateway::{payload::MessageCreate};
-use twilight_model::channel::embed::{Embed, EmbedField};
+use twilight_http:: {Client as HttpClient, request::channel::reaction::RequestReactionType};
+use twilight_model::gateway::{payload::MessageCreate, payload::ReactionAdd};
+use twilight_model::channel::{embed::{Embed, EmbedField}, ReactionType};
 use twilight_standby::Standby;
 use anyhow::{Result};
 use convert_case::{Case, Casing};
+use futures::stream::StreamExt;
 use reqwest;
 
 const MAX_RESULTS: i8 = 5; //Number of ambiguous results to show: up to 9
+const REACTIONS: [&str; 5] = ["\u{0031}\u{20E3}", "\u{0032}\u{20E3}", "\u{0033}\u{20E3}", "\u{0034}\u{20E3}", "\u{0035}\u{20E3}"]; //This should be the same length as MAX_RESULTS, all unicode numeric reactions
+const CANCEL: &str = "\u{274C}"; //Unicode for the red X
 
 //TODO: Abstract the discord api methods. Like "build_embed_from_struct" and "send_text_message" and "send_embed_message"
 pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String) -> Result<(), Box<dyn std::error::Error>> {
+    http.create_typing_trigger(msg.channel_id);
     let search_results = search_for_term(&keyword).await?;
     if &search_results.len() == &0 {
         //Can't find any results. Alert user and get out of this function.
@@ -28,21 +32,34 @@ pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String
             let mut named_option = Vec::new();
             named_option.push(String::from(&search_results[option]));
             let option_info = extract_info(&named_option).await?;
-            options_string = format!("{}\n[{}] {}", options_string, option+1, option_info);
+            options_string = format!("{}\n{} - {}", options_string, REACTIONS[option].to_string(), option_info);
         }
         //Add cancel option
-        options_string = format!("{}\n[{}] Cancel", options_string, search_results.len()+1);
+        options_string = format!("{}\n{} - Cancel", options_string, CANCEL.to_string());
 
-        let clarification = http.create_message(msg.channel_id).reply(msg.id).content(format!("Found more than one possible term. Please let me know which one to look up by simply responding with the number shown beside the desired choice.\n{}", options_string))?.await?;
-        //STUBBED IN. TODO
-        let decision = http.create_message(msg.channel_id).reply(msg.id).content(format!("1"))?.await?;
+        let clarification = http.create_message(msg.channel_id).reply(msg.id).content(format!("Found more than one possible term. Please let me know which one to look up by simply reacting to this message with the emoji beside the desired choice.\n{}", options_string))?.await?;
+        //Add reactions to allow user to select
+        for option in 0..search_results.len() {
+            let num = REACTIONS[option].to_string();
+            let react = http.create_reaction(clarification.channel_id, clarification.id, RequestReactionType::Unicode { name: num } ).await?;
+        }
+        //React with CANCEL
+        http.create_reaction(clarification.channel_id, clarification.id, RequestReactionType::Unicode {name: CANCEL.to_string()} ).await?;
+        //Wait for user to react
         let standby = Standby::new();
+        let mut decision = standby.wait_for_reaction_stream(clarification.id, |event: &ReactionAdd| {
+            matches!(&event.emoji, ReactionType::Unicode { name } if name == "\u{0031}\u{20E3}")
+        });
+
+        //STUBBED IN. TODO
+        /**
+        let decision = http.create_message(msg.channel_id).reply(msg.id).content(format!("1"))?.await?;
         //let message = msg.to_owned();
 
         //let decision = standby.wait_for_message(message.channel_id, move |event: &MessageCreate| {
         //    event.author.id == message.author.id && (event.content == "1" || event.content == "2" || event.content == "3" || event.content == "4")
         //}).await?;
-        println!("DECISION? {:?}", decision);
+        //println!("DECISION? {:?}", decision);
         //Convert user choice to usize, then respond with choice
         let mut user_response: usize = 10;
         if decision.content.parse::<usize>().is_err() {
@@ -64,6 +81,8 @@ pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String
             let embed = build_embed(&response_vec).await?;
             http.create_message(msg.channel_id).reply(msg.id).embed(embed)?.await?;
         }
+        */
+        println!("Hey-o");
     }
     Ok(())
 }
