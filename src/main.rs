@@ -17,7 +17,7 @@ use std::time::Duration;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let token = env::var("DISCORD_TOKEN")?;
-    let mut omnidata_cache: HashMap<GuildId, Arc<Mutex<Omnidata>>> = HashMap::new();
+    let mut omnidata_cache: HashMap<GuildId, Arc<Mutex<Option<Omnidata>>>> = HashMap::new();
     
     // Create the commands the bot will listen for
     let mut config = CommandParserConfig::new();
@@ -72,10 +72,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             Event::MessageCreate(msg) => {
                 let guild_id = msg.guild_id.expect("WTF, no guild ID in message!");
                 if !omnidata_cache.contains_key(&guild_id) {
-                    let discord_refs: DiscordReferences = DiscordReferences {http: &http, msg: &msg};
-                    let tracker = discord::get_tracker(&discord_refs).await?;
-                    omnidata_cache.insert(guild_id, Arc::new(Mutex::new(tracker)));
+                    omnidata_cache.insert(guild_id, Arc::new(Mutex::new(None)));
                 }
+                let discord_refs: DiscordReferences = DiscordReferences {http: &http, msg: &msg};
                 tokio::spawn(handle_message(http.clone(),Arc::clone(omnidata_cache.get(&guild_id).expect("Expected to find omnidata in hash!")), msg, parser.clone())).await?;
             }
             Event::ShardConnected(_) => {
@@ -91,7 +90,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
 async fn handle_message(
     http: HttpClient,
-    omnidata_cache: Arc<Mutex<Omnidata>>,
+    omnidata_cache: Arc<Mutex<Option<Omnidata>>>,
     msg: Box<MessageCreate>,
     parser: Parser<'_>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {

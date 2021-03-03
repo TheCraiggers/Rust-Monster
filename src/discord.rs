@@ -25,6 +25,16 @@ pub struct DiscordReferences<'a> {
     pub msg: &'a Box<MessageCreate>,
 }
 
+impl DiscordReferences<'_> {
+    pub async fn send_message(&self, text: &str) -> Result<()>{
+        println!("Sending message");
+        match self.http.create_message(self.msg.channel_id).content(text)?.await {
+            Ok(_) => Ok(()),
+            Err(e) => Err(anyhow!(e.to_string()))
+        }
+    }
+}
+
 /// This is an idempotent function that will create the channels to house all bot data and a category to contain them.
 pub async fn create_omni_data_channel(DiscordReferences { http, msg }: &DiscordReferences<'_>, guild_channels: &Vec<GuildChannel>) -> Result<GuildChannel> {
     //Usually we want to make the channel in a category to make things easier for the server owner to manage, so find/make that first.

@@ -3,7 +3,7 @@ use crate::{discord, omni::character::Character};
 use serde::{Deserialize, Serialize};
 use crate::discord::{DiscordReferences};
 use anyhow::{Result, anyhow};
-use std::{sync::Arc, u16};
+use std::{borrow::Borrow, sync::Arc, u16};
 use futures::{TryFutureExt, lock::Mutex};
 
 const OMNI_VERSION: u16 = 0;
@@ -39,19 +39,36 @@ impl Omnidata {
     }
 }
 
+// pub async fn test(discord_refs: &DiscordReferences<'_>) -> Result<()> {
+//     futures::executor::block_on(discord_refs.send_message("text"))  //Never returns
+//     discord_refs.send_message("text").await                         //Works fine
+// }
+
 pub async fn handle_command(
     discord_refs: &DiscordReferences<'_>, 
-    omnidata_cache: Arc<Mutex<Omnidata>>,
+    omnidata_cache: Arc<Mutex<Option<Omnidata>>>,
     arguments: &str,
 ) -> anyhow::Result<()> {
     
     // Lock the cached botdata. This should prevent any othe commands from being run on this guild
-    let mut omnidata = omnidata_cache.lock().await;
+    // If it doesn't exist, get the data from the guild and cache it
+    let mut omnidata_guard = omnidata_cache.lock().await;
+    if omnidata_guard.is_none() {
+        *omnidata_guard = match discord::get_tracker(&discord_refs).await {
+            Ok(v) => Some(v),
+            Err(e) => {
+                println!("Error setting up bot. {:?}", e);
+                discord_refs.send_message("Could not setup bot. Does it have Manage Channel permissions?").await?;
+                return Err(anyhow!("Could not set up bot channel."));
+            }
+        }
+    }
+    let omnidata = omnidata_guard.as_mut().unwrap();
 
     // Do whatever the user requested us to do
-    for foo in 1..9000 {
-        omnidata.add_character("me");
-    }
+    // TODO: Add method to figure out what the user wants. For now, let's add a character.
+    omnidata.add_character("me");
+    
     let reply_msg = discord_refs.http.create_message(discord_refs.msg.channel_id).reply(discord_refs.msg.id).content(format!("This is your reply for {}", arguments))?.map_err(|e| anyhow!("Problem creating reply!"));
     let save = discord::omni_data_save(&discord_refs, &omnidata);
     match futures::try_join!(reply_msg, save) {
