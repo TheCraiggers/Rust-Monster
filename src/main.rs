@@ -103,13 +103,7 @@ async fn handle_message(
                 },
                 Ok(_) => {
                     println!("Command successful");
-                },
-                Some(Command { name: "lookup", arguments, .. }) => {
-                    &lookup::lookup(&http, &msg, arguments.as_str().to_string()).await;
                 }
-                //Ignore anything that doesn't match the commands above.
-                Some(_) => {},
-                None => {},
             }
         },
         Some(Command { name: "lookup", arguments, .. }) => {

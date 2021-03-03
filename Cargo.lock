@@ -797,7 +797,7 @@ dependencies = [
  "cfg-if",
  "instant",
  "libc",
- "redox_syscall 0.1.57",
+ "redox_syscall",
  "smallvec",
  "winapi",
 ]
@@ -973,15 +973,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "redox_syscall"
-version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94341e4e44e24f6b591b59e47a8a027df12e008d73fd5672dbea9cc22f4507d9"
-dependencies = [
- "bitflags",
-]
-
-[[package]]
 name = "regex"
 version = "1.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1084,7 +1075,6 @@ dependencies = [
  "twilight-gateway",
  "twilight-http",
  "twilight-model",
- "twilight-standby",
 ]
 
 [[package]]
@@ -1749,19 +1739,6 @@ dependencies = [
  "serde-value",
  "serde_repr",
  "tracing",
-]
-
-[[package]]
-name = "twilight-standby"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "014e85b52344914336f178000c36dc7062eee12ec9ca705dae9509bd4fa03646"
-dependencies = [
- "dashmap",
- "futures-channel",
- "futures-util",
- "tracing",
- "twilight-model",
 ]
 
 [[package]]
