@@ -47,7 +47,7 @@ pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String
         http.create_reaction(clarification.channel_id, clarification.id, RequestReactionType::Unicode {name: CANCEL.to_string()} ).await?;
 
         //THREAD SLEEP DREAD SLEEP
-        for t in 0..200 {
+        for t in 0..20 {
             let mut reaction_list = http.reactions(clarification.channel_id, clarification.id, RequestReactionType::Unicode { name: CANCEL.to_string()}).await?;
             if reaction_list.iter().any(| UserId | UserId == &msg.author) {
                 http.delete_message(msg.channel_id, clarification.id).await?;
@@ -57,6 +57,7 @@ pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String
                 let num = REACTIONS[option].to_string();
                 reaction_list = http.reactions(clarification.channel_id, clarification.id, RequestReactionType::Unicode { name: num }).await?;
                 if reaction_list.iter().any(| UserId | UserId == &msg.author) {
+                    let _typing = http.create_typing_trigger(msg.channel_id).await;
                     let response_string = &search_results[option];
                     let mut response_vec: Vec<String> = Vec::new();
                     response_vec.push(response_string.to_string());
@@ -68,6 +69,7 @@ pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String
             }
             sleep(Duration::from_millis(100)).await;
         }
+        http.delete_message(msg.channel_id, clarification.id).await?;
 
         return Ok(());
     }
