@@ -1,17 +1,33 @@
 use std::{env, error::Error};
-use futures::stream::StreamExt;
+use discord::DiscordReferences;
+use futures::{lock::Mutex, stream::StreamExt};
+use omni::Omnidata;
 use twilight_cache_inmemory::{InMemoryCache, ResourceType};
 use twilight_gateway::{cluster::{Cluster, ShardScheme}, Event};
 use twilight_http::Client as HttpClient;
-use twilight_model::{channel::{GuildChannel, Message, ChannelType::GuildCategory}, gateway::{Intents, payload::MessageCreate}, guild::Guild};
+use twilight_model::{gateway::{Intents, payload::MessageCreate}, id::GuildId};
 use twilight_command_parser::{Command, CommandParserConfig, Parser};
 mod omni;
 mod lookup;
 pub mod discord;
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let token = env::var("DISCORD_TOKEN")?;
+    let mut omnidata_cache: HashMap<GuildId, Arc<Mutex<Option<Omnidata>>>> = HashMap::new();
+    
+    // Create the commands the bot will listen for
+    let mut config = CommandParserConfig::new();
+    config.add_prefix("!");
+    config.add_prefix("! ");    //For mobile users like me. Android puts a space after ! because it's punctuation
+    config.add_command("omni", false);
+    config.add_command("lookup", false);
+    let parser = Parser::new(config);
+    
+    //Useful for Discord debugging if DEBUG=true.
     tracing_subscriber::fmt::init();
 
     // This is the default scheme. It will automatically create as many
@@ -33,7 +49,11 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     });
 
     // HTTP is separate from the gateway, so create a new client.
-    let http = HttpClient::new(&token);
+    //let http = HttpClient::new(&token);
+    let http = HttpClient::builder()
+        .token(&token)
+        .timeout(Duration::from_secs(300))   
+        .build();
 
     // Since we only care about new messages, make the cache only
     // cache new messages.
@@ -48,46 +68,41 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         // Update the cache with the event.
         cache.update(&event);
 
-        tokio::spawn(handle_event(shard_id, event, http.clone()));
+        match event {
+            Event::MessageCreate(msg) => {
+                let guild_id = msg.guild_id.expect("WTF, no guild ID in message!");
+                if !omnidata_cache.contains_key(&guild_id) {
+                    omnidata_cache.insert(guild_id, Arc::new(Mutex::new(None)));
+                }
+                tokio::spawn(handle_message(http.clone(),Arc::clone(omnidata_cache.get(&guild_id).expect("Expected to find omnidata in hash!")), msg, parser.clone()));
+            }
+            Event::ShardConnected(_) => {
+                println!("Connected on shard {}", shard_id);
+            }        
+            // Other events here...
+            _ => {}
+        }
     }
 
     Ok(())
 }
 
-async fn handle_event(
-    shard_id: u64,
-    event: Event,
+async fn handle_message(
     http: HttpClient,
+    omnidata_cache: Arc<Mutex<Option<Omnidata>>>,
+    msg: Box<MessageCreate>,
+    parser: Parser<'_>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    //Create the commands the bot will listen for
-    let mut config = CommandParserConfig::new();
-    config.add_prefix("!");
-    config.add_prefix("! ");    //For mobile users like me. Android puts a space after ! because it's punctuation
-    config.add_command("omni", false);
-    config.add_command("lookup", false);
-    let parser = Parser::new(config);
+    let discord_refs: DiscordReferences = DiscordReferences {http: &http, msg: &msg};
 
-    match event {
-        Event::MessageCreate(msg) => {
-            match parser.parse(&msg.content) {
-                Some(Command { name: "omni", arguments, .. }) => {
-                    //Get the bot data from the guild. But first, we need to get the channel, or create it.
-                    let guild_channels = http.guild_channels(msg.guild_id.expect("Could not get guild ID!")).await?;
-                    let bot_data_channel;
-                    let bot_data_message: &Message;
-                    match guild_channels.iter().find(|&channel| channel.name() == discord::BOT_DATA_CHANNEL_NAME) {
-                        Some(channel) => {
-                            println!("Found the bot channel!");
-                            bot_data_channel = channel;
-                        }
-                        None => {
-                            //Do setup
-                            bot_data_channel = &discord::create_omni_data_channel(&http, &msg, &guild_channels).await?;
-                            http.create_message(msg.channel_id).reply(msg.id).content(format!("Bot setup complete."))?.await?;
-                        }
-                    }
-                    //Next, get the messages in that channel and look for the active one.
-                    //Finally, send the command args & the current data message to the omni crate entry point
+    match parser.parse(&msg.content) {
+        Some(Command { name: "omni", arguments, .. }) => {
+            match omni::handle_command(&discord_refs, Arc::clone(&omnidata_cache), arguments.as_str()).await {
+                Err(error) => {
+                    println!("Command failed with error: {:?}", error);
+                },
+                Ok(_) => {
+                    println!("Command successful");
                 },
                 Some(Command { name: "lookup", arguments, .. }) => {
                     &lookup::lookup(&http, &msg, arguments.as_str().to_string()).await;
@@ -96,12 +111,13 @@ async fn handle_event(
                 Some(_) => {},
                 None => {},
             }
+        },
+        Some(Command { name: "lookup", arguments, .. }) => {
+            &lookup::lookup(&http, &msg, arguments.as_str().to_string()).await;
         }
-        Event::ShardConnected(_) => {
-            println!("Connected on shard {}", shard_id);
-        }        
-        // Other events here...
-        _ => {}
+        //Ignore anything that doesn't match the commands above.
+        Some(_) => {},
+        None => {},
     }
 
     Ok(())

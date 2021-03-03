@@ -1,15 +1,21 @@
 mod effect;
 use crate::omni::character::effect::Effect;
-use twilight_model::id::UserId;
+use serde::{Deserialize, Serialize};
 
-enum CharacterKind {
+#[derive(Serialize, Deserialize, Debug)]
+pub enum CharacterKind {
     Player,
     Npc
 }
 
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Character {
-    kind: CharacterKind,
-    name: String,
-    owner: UserId,
-    effects: Vec<Effect>,
+    pub kind: CharacterKind,
+    pub name: String,
+    pub owner: String,  //TODO: May need to find a better type for this
+    pub effects: Vec<Effect>,
+}
+
+impl Character {
+    
 }
