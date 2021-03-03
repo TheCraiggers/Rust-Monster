@@ -52,7 +52,9 @@ pub async fn handle_command(
     
     // Lock the cached botdata. This should prevent any othe commands from being run on this guild
     // If it doesn't exist, get the data from the guild and cache it
+    println!("Getting lock for guild ID {:?}", discord_refs.msg.guild_id);
     let mut omnidata_guard = omnidata_cache.lock().await;
+    println!("Got lock for guild ID {:?}", discord_refs.msg.guild_id);
     if omnidata_guard.is_none() {
         *omnidata_guard = match discord::get_tracker(&discord_refs).await {
             Ok(v) => Some(v),
@@ -67,7 +69,9 @@ pub async fn handle_command(
 
     // Do whatever the user requested us to do
     // TODO: Add method to figure out what the user wants. For now, let's add a character.
-    omnidata.add_character("me");
+    for n in 1..90000 {
+        omnidata.add_character("me");
+    }
     
     let reply_msg = discord_refs.http.create_message(discord_refs.msg.channel_id).reply(discord_refs.msg.id).content(format!("This is your reply for {}", arguments))?.map_err(|e| anyhow!("Problem creating reply!"));
     let save = discord::omni_data_save(&discord_refs, &omnidata);
