@@ -4,6 +4,7 @@ use twilight_model::channel::{embed::{Embed, EmbedField}, ReactionType};
 use anyhow::{Result};
 use convert_case::{Case, Casing};
 use futures::stream::StreamExt;
+use tokio::time::{sleep, Duration};
 use reqwest;
 
 const MAX_RESULTS: i8 = 5; //Number of ambiguous results to show: up to 9
@@ -13,7 +14,7 @@ const CANCEL: &str = "\u{274C}"; //Unicode for the red X
 //TODO: Abstract the discord api methods. Like "build_embed_from_struct" and "send_text_message" and "send_embed_message"
 ///Lookup accepts an HttpClient, MessageCreate, and keyword String then outputs a boolean. A "true" output means that the lookup has returned it's result. A "false" output means that it has returned too many results and needs user interaction.
 pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String) -> Result<(), Box<dyn std::error::Error>> {
-    http.create_typing_trigger(msg.channel_id).await;
+    let _typing = http.create_typing_trigger(msg.channel_id).await;
     let search_results = search_for_term(&keyword).await?;
     if &search_results.len() == &0 {
         //Can't find any results. Alert user and get out of this function.
@@ -44,32 +45,31 @@ pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String
         }
         //React with CANCEL
         http.create_reaction(clarification.channel_id, clarification.id, RequestReactionType::Unicode {name: CANCEL.to_string()} ).await?;
+
+        //THREAD SLEEP DREAD SLEEP
+        for t in 0..200 {
+            let mut reaction_list = http.reactions(clarification.channel_id, clarification.id, RequestReactionType::Unicode { name: CANCEL.to_string()}).await?;
+            if reaction_list.iter().any(| UserId | UserId == &msg.author) {
+                http.delete_message(msg.channel_id, clarification.id).await?;
+                break
+            }
+            for option in 0..search_results.len() {
+                let num = REACTIONS[option].to_string();
+                reaction_list = http.reactions(clarification.channel_id, clarification.id, RequestReactionType::Unicode { name: num }).await?;
+                if reaction_list.iter().any(| UserId | UserId == &msg.author) {
+                    let response_string = &search_results[option];
+                    let mut response_vec: Vec<String> = Vec::new();
+                    response_vec.push(response_string.to_string());
+                    http.delete_message(msg.channel_id, clarification.id).await?;
+                    let embed = build_embed(&response_vec).await?;
+                    http.create_message(msg.channel_id).reply(msg.id).embed(embed)?.await?;
+                    break
+                }
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+
         return Ok(());
-        //STUBBED IN. TODO
-        /**
-        //Convert user choice to usize, then respond with choice
-        let mut user_response: usize = 10;
-        if decision.content.parse::<usize>().is_err() {
-            user_response = search_results.len()+1;
-        } else {
-            user_response = decision.content.parse::<usize>().unwrap();
-        }
-        if user_response > search_results.len() || user_response < 1 {
-            http.delete_message(msg.channel_id, clarification.id).await?;
-            http.delete_message(msg.channel_id, decision.id).await?;
-            println!("Canceled");
-        } else {
-            println!("Do something");
-            let response_string = &search_results[user_response-1];
-            let mut response_vec: Vec<String> = Vec::new();
-            response_vec.push(response_string.to_string());
-            http.delete_message(msg.channel_id, clarification.id).await?;
-            http.delete_message(msg.channel_id, decision.id).await?;
-            let embed = build_embed(&response_vec).await?;
-            http.create_message(msg.channel_id).reply(msg.id).embed(embed)?.await?;
-        }
-        */
-        println!("Hey-o");
     }
 }
 
