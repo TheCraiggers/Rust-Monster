@@ -6,7 +6,7 @@
 
 use omni::{Omnidata};
 use twilight_http::Client as HttpClient;
-use twilight_model::{channel::{ChannelType::GuildCategory, GuildChannel, Message}, gateway::{payload::MessageCreate}};
+use twilight_model::{channel::{ChannelType::GuildCategory, GuildChannel}, gateway::{payload::MessageCreate}};
 use anyhow::{Context, Result, anyhow};
 use crate::omni;
 use reqwest;
@@ -27,7 +27,6 @@ pub struct DiscordReferences<'a> {
 
 impl DiscordReferences<'_> {
     pub async fn send_message(&self, text: &str) -> Result<()>{
-        println!("Sending message");
         match self.http.create_message(self.msg.channel_id).content(text)?.await {
             Ok(_) => Ok(()),
             Err(e) => Err(anyhow!(e.to_string()))
@@ -41,11 +40,9 @@ pub async fn create_omni_data_channel(DiscordReferences { http, msg }: &DiscordR
     let channel_category;
     match guild_channels.iter().find(|&channel| channel.name() == BOT_DATA_CHANNEL_CATEGORY_NAME) {
         Some(category) => {
-            println!("Found bot data channel category!");
             channel_category = category.clone();
         }
         None => {
-            println!("Creating category for bot data.");
             channel_category = http.create_guild_channel(msg.guild_id.expect("Could not find guild ID when creating bot category!"), BOT_DATA_CHANNEL_CATEGORY_NAME)?
                 .kind(GuildCategory)
                 .position(999)
@@ -58,7 +55,6 @@ pub async fn create_omni_data_channel(DiscordReferences { http, msg }: &DiscordR
     let bot_data_channel: GuildChannel;
     match guild_channels.iter().find(|&channel| channel.name() == BOT_DATA_CHANNEL_NAME) {
         Some(channel) => {
-            println!("Found bot data channel!");
             bot_data_channel = channel.clone();
         }
         None => {
@@ -78,7 +74,6 @@ pub async fn get_omni_data_channel(discord_references: &DiscordReferences<'_>) -
 
     match guild_channels.iter().find(|&channel| channel.name() == BOT_DATA_CHANNEL_NAME) {
         Some(channel) => {
-            println!("Found the bot channel!");
             return Ok(channel.to_owned());
         }
         None => {

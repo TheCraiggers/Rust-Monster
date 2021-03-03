@@ -74,8 +74,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 if !omnidata_cache.contains_key(&guild_id) {
                     omnidata_cache.insert(guild_id, Arc::new(Mutex::new(None)));
                 }
-                let discord_refs: DiscordReferences = DiscordReferences {http: &http, msg: &msg};
-                println!("Spawning thread for guild ID {:?}", discord_refs.msg.guild_id);
                 tokio::spawn(handle_message(http.clone(),Arc::clone(omnidata_cache.get(&guild_id).expect("Expected to find omnidata in hash!")), msg, parser.clone()));
             }
             Event::ShardConnected(_) => {
@@ -96,8 +94,6 @@ async fn handle_message(
     parser: Parser<'_>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let discord_refs: DiscordReferences = DiscordReferences {http: &http, msg: &msg};
-
-    println!("Inside thread for guild ID {:?}", discord_refs.msg.guild_id);
 
     match parser.parse(&msg.content) {
         Some(Command { name: "omni", arguments, .. }) => {
