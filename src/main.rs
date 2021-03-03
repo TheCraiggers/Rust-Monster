@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let token = env::var("DISCORD_TOKEN")?;
     let mut omnidata_cache: HashMap<GuildId, Arc<Mutex<Option<Omnidata>>>> = HashMap::new();
@@ -52,7 +52,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     //let http = HttpClient::new(&token);
     let http = HttpClient::builder()
         .token(&token)
-        .timeout(Duration::from_secs(30))   
+        .timeout(Duration::from_secs(300))   
         .build();
 
     // Since we only care about new messages, make the cache only
@@ -75,7 +75,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                     omnidata_cache.insert(guild_id, Arc::new(Mutex::new(None)));
                 }
                 let discord_refs: DiscordReferences = DiscordReferences {http: &http, msg: &msg};
-                tokio::spawn(handle_message(http.clone(),Arc::clone(omnidata_cache.get(&guild_id).expect("Expected to find omnidata in hash!")), msg, parser.clone())).await?;
+                println!("Spawning thread for guild ID {:?}", discord_refs.msg.guild_id);
+                tokio::spawn(handle_message(http.clone(),Arc::clone(omnidata_cache.get(&guild_id).expect("Expected to find omnidata in hash!")), msg, parser.clone()));
             }
             Event::ShardConnected(_) => {
                 println!("Connected on shard {}", shard_id);
@@ -95,6 +96,8 @@ async fn handle_message(
     parser: Parser<'_>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let discord_refs: DiscordReferences = DiscordReferences {http: &http, msg: &msg};
+
+    println!("Inside thread for guild ID {:?}", discord_refs.msg.guild_id);
 
     match parser.parse(&msg.content) {
         Some(Command { name: "omni", arguments, .. }) => {
