@@ -1,12 +1,20 @@
-use twilight_http::Client as HttpClient;
-use twilight_model::gateway::{payload::MessageCreate};
-use twilight_model::channel::embed::{Embed, EmbedField};
-use anyhow::{Result, anyhow};
+use twilight_http:: {Client as HttpClient, request::channel::reaction::RequestReactionType};
+use twilight_model::gateway::{payload::MessageCreate, payload::ReactionAdd};
+use twilight_model::channel::{embed::{Embed, EmbedField}, ReactionType};
+use anyhow::{Result};
 use convert_case::{Case, Casing};
+use futures::stream::StreamExt;
+use tokio::time::{sleep, Duration};
 use reqwest;
 
+const MAX_RESULTS: i8 = 5; //Number of ambiguous results to show: up to 9
+const REACTIONS: [&str; 5] = ["\u{0031}\u{20E3}", "\u{0032}\u{20E3}", "\u{0033}\u{20E3}", "\u{0034}\u{20E3}", "\u{0035}\u{20E3}"]; //This should be the same length as MAX_RESULTS, all unicode numeric reactions
+const CANCEL: &str = "\u{274C}"; //Unicode for the red X
+
 //TODO: Abstract the discord api methods. Like "build_embed_from_struct" and "send_text_message" and "send_embed_message"
+///Lookup accepts an HttpClient, MessageCreate, and keyword String then outputs a boolean. A "true" output means that the lookup has returned it's result. A "false" output means that it has returned too many results and needs user interaction.
 pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String) -> Result<(), Box<dyn std::error::Error>> {
+    let _typing = http.create_typing_trigger(msg.channel_id).await;
     let search_results = search_for_term(&keyword).await?;
     if &search_results.len() == &0 {
         //Can't find any results. Alert user and get out of this function.
@@ -14,18 +22,57 @@ pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String
         return Ok(());
     } else if &search_results.len() == &1 {
         //Exact match! Start building the embed and send a response
-        println!("Exact match! {:?}", &search_results);
-        let id = extract_id(&search_results).await?;
-        let embed = build_embed(&id).await?;
+        let embed = build_embed(&search_results).await?;
         http.create_message(msg.channel_id).reply(msg.id).embed(embed)?.await?;
+        return Ok(());
     } else {
-        //Disambiguous. Ask user which of the short list they mean.
-        //TODO: Ask User which result they mean. Then start making the embed after that
-        println!("A lot of matches {:?}", &search_results);
-        let embed = build_embed(&"8461").await?;
-        http.create_message(msg.channel_id).reply(msg.id).embed(embed)?.await?;
+        //Ambiguous. Ask user which of the short list they mean.
+        let mut options_string: String = String::from("");
+        for option in 0..search_results.len() {
+            let mut named_option = Vec::new();
+            named_option.push(String::from(&search_results[option]));
+            let option_info = extract_info(&named_option).await?;
+            options_string = format!("{}\n{} - {}", options_string, REACTIONS[option].to_string(), option_info);
+        }
+        //Add cancel option
+        options_string = format!("{}\n{} - Cancel", options_string, CANCEL.to_string());
+
+        let clarification = http.create_message(msg.channel_id).reply(msg.id).content(format!("Found more than one possible term. Please let me know which one to look up by simply reacting to this message with the emoji beside the desired choice.\n{}", options_string))?.await?;
+        //Add reactions to allow user to select
+        for option in 0..search_results.len() {
+            let num = REACTIONS[option].to_string();
+            let react = http.create_reaction(clarification.channel_id, clarification.id, RequestReactionType::Unicode { name: num } ).await?;
+        }
+        //React with CANCEL
+        http.create_reaction(clarification.channel_id, clarification.id, RequestReactionType::Unicode {name: CANCEL.to_string()} ).await?;
+
+        //THREAD SLEEP DREAD SLEEP
+        for t in 0..20 {
+            let mut reaction_list = http.reactions(clarification.channel_id, clarification.id, RequestReactionType::Unicode { name: CANCEL.to_string()}).await?;
+            if reaction_list.iter().any(| UserId | UserId == &msg.author) {
+                http.delete_message(msg.channel_id, clarification.id).await?;
+                break
+            }
+            for option in 0..search_results.len() {
+                let num = REACTIONS[option].to_string();
+                reaction_list = http.reactions(clarification.channel_id, clarification.id, RequestReactionType::Unicode { name: num }).await?;
+                if reaction_list.iter().any(| UserId | UserId == &msg.author) {
+                    let _typing = http.create_typing_trigger(msg.channel_id).await;
+                    let response_string = &search_results[option];
+                    let mut response_vec: Vec<String> = Vec::new();
+                    response_vec.push(response_string.to_string());
+                    http.delete_message(msg.channel_id, clarification.id).await?;
+                    let embed = build_embed(&response_vec).await?;
+                    http.create_message(msg.channel_id).reply(msg.id).embed(embed)?.await?;
+                    break
+                }
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+        http.delete_message(msg.channel_id, clarification.id).await?;
+
+        return Ok(());
     }
-    Ok(())
 }
 
 ///extract_id splits a result and extracts the id to be used later
@@ -53,6 +100,89 @@ async fn split_string(split_me: &str, start_split: &str, end_split: &str) -> Res
     let end_byte = split_me.find(end_split).unwrap_or(split_me.len());
     let output = &split_me[start_byte..end_byte];
     return Ok(output.to_string());
+}
+
+///sanitize removes html formatting from a string. It replaces some html formatting with discord syntax, and some emojis.
+async fn sanitize(sanitize_me: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let iter = sanitize_me.len()/3;
+    let mut return_string = sanitize_me.to_string();
+    for n in 0..iter {
+        if return_string.find("<") == None || return_string.find(">") == None {
+            return Ok(return_string)
+        }
+        let start_byte = return_string.find("<").unwrap(); 
+        let mut end_byte = return_string.find(">").unwrap()+1;
+        let mut temp_string = &return_string[start_byte+1..]; 
+        let mut open_count = 1;
+        let mut close_count = 0;
+        let mut byte_count = start_byte+1;
+        loop {
+            if temp_string.find("<") == None || temp_string.find(">") == None {
+                if temp_string.find(">") != None {
+                    end_byte = return_string.rfind(">").unwrap()+1;
+                } else{
+                end_byte = byte_count;
+                }
+                break
+            }
+            if temp_string.find("<").unwrap() < temp_string.find(">").unwrap() {
+                open_count += 1;
+                byte_count = byte_count+temp_string.find("<").unwrap()+1;
+                temp_string = &temp_string[temp_string.find("<").unwrap()+1..];
+            } else {
+                close_count += 1;
+                byte_count = byte_count+temp_string.find(">").unwrap()+1;
+                temp_string = &temp_string[temp_string.find(">").unwrap()+1..];
+            }
+            if open_count == close_count {
+                end_byte = byte_count;
+                break
+            }
+        }
+        
+        let slice = &return_string[start_byte..end_byte];
+        let mut new_slice = "";
+        //TODO: use custom emojis like https://github.com/Rapptz/discord.py/issues/390 instead of :one:, :two:, etc.
+        //Use http.get_emojis and http.create_emoji to accomplish this in bot setup. Then get the id of the emojis and store them as public consts.
+        if &slice == &"<p>" || &slice == &"<p class=\"fancy\">" || slice.contains("/h3") || &slice == &"<tr>" {
+            new_slice = "\n";
+        } else if &slice == &"</section>" {
+            new_slice = "\n------------";
+        } else if &slice == &"<strong>" {
+            new_slice = " **";
+        } else if &slice == &"</strong>" {
+            new_slice = "** ";
+        } else if &slice == &"<em>" {
+            new_slice = " _";
+        } else if &slice == &"</em>" {
+            new_slice = "_ ";
+        } else if &slice == &"</th>" || &slice == &"</td>" {
+            new_slice = "|";
+        } else if slice.contains("class=\"pf2 action1\"") {
+            new_slice = " :one: ";
+        } else if slice.contains("class=\"pf2 action2\"") {
+            new_slice = " :two: ";
+        } else if slice.contains("class=\"pf2 action3\"") {
+            new_slice = " :three: ";
+        } else if slice.contains("class=\"pf2 Reaction\"") {
+            new_slice = " :arrow_heading_down: ";
+        } else if slice.contains("class=\"pf2 actionF\"") {
+            new_slice = " :free: ";
+        }
+        return_string = return_string.replace(slice, new_slice);
+    }
+    return Ok(return_string)
+}
+
+/// pretty_format Makes some further alterations to strings for the embed. 
+/// It does things liks split up types of items and add some line breaks to make spell outcomes easier to read
+async fn pretty_format(mut string_to_format: String) -> Result<String, Box<dyn std::error::Error>> {
+    string_to_format = str::replace(&string_to_format, "\nType", "\n\nType");
+    string_to_format = str::replace(&string_to_format, "**Critical Success**", "\n\n**Critical Success**");
+    string_to_format = str::replace(&string_to_format, "**Success**", "\n\n**Success**");
+    string_to_format = str::replace(&string_to_format, "**Failure**", "\n\n**Failure**");
+    string_to_format = str::replace(&string_to_format, "**Critical Failure**", "\n\n**Critical Failure**");
+    return Ok(string_to_format)
 }
 
 ///search_for_term searches for a term, then adds the top 3 results to a vector in the form of
@@ -87,8 +217,7 @@ async fn search_for_term(term: &str) -> Result<Vec<String>, Box<dyn std::error::
                 search_results.push(one_result);
             }
             i+=1;
-            if i > 3 {
-                println!("to Cancel.");
+            if i > MAX_RESULTS {
                 break;
             }
         }
@@ -100,7 +229,8 @@ async fn search_for_term(term: &str) -> Result<Vec<String>, Box<dyn std::error::
 
 ///build_embed uses an id to find the specific result. Then builds an embed.
 ///The embed should use Title, Traits, Details, Description, and URL
-async fn build_embed(id: &str) -> Result<Embed, Box<dyn std::error::Error>> {
+async fn build_embed(result: &Vec<String>) -> Result<Embed, Box<dyn std::error::Error>> {
+    let id = extract_id(&result).await?;
     let req_body:String = format!("id={}", id);
     let req_url:String = format!("https://pf2.easytool.es/index.php?id={}", &id);
     let client = reqwest::Client::new();
@@ -112,29 +242,64 @@ async fn build_embed(id: &str) -> Result<Embed, Box<dyn std::error::Error>> {
         .await?;
     //Check the response for a success
     if response.status().is_success() {
-        //Split the response
         let response_string: String = response.text().await?;
-        //TODO: Split the response string up and extract the Title, Description, Traits, and Details
-        let title = split_string(&response_string, "<title>Pathfinder 2 | ", "</title>").await?
-            .to_case(Case::Upper);
-        let description = split_string(&response_string, "description\' content=\'", "\' />").await?;
         //println!("{:#?}", response_string);
+        //Get title
+        let title = extract_info(&result).await?
+            .to_case(Case::Upper);
+        //Get main description
+        let init_description = split_string(&response_string, "description\' content=\'", "\' />").await?;
+        //Chop the length of the description if it is too large for the embed
+        let mut description: String = "Description Placeholder".to_string();
+        description = init_description;
+        //If traits exist, get the traits, otherwise send an empty struct
+        let mut traits = EmbedField {
+            inline: true,
+            name: "Empty".to_owned(),
+            value: "Empty".to_owned()
+        };
+        if &response_string.find("class=\"content\"").unwrap_or(0) != &0 {
+            let another_description = split_string(&response_string, "class=\"content\">", "</section>\n\t\t\t<footer class").await?;
+            description = sanitize(&another_description).await?;
+        }
+
+        if &response_string.find("class=\'traits\'>").unwrap_or(0) != &0 {
+            let traits_string = split_string(&response_string, "class=\'traits\'>", "</section>\n\t\t\t\t<section class=\'details\'>").await?;
+            let mut traits_value = sanitize(&traits_string).await?;
+            if traits_value.find("\n\n").unwrap_or(0) != 0 {
+                let end_traits = traits_value.find("\n\n").unwrap();
+                traits_value = traits_value[..end_traits].to_string();
+            }
+            //println!("TRAITS: {}", &traits_value);
+            traits = EmbedField {
+                inline: true,
+                name: "Traits".to_owned(),
+                value: traits_value.to_owned()
+            };
+        }
+        //If details exist, get the details
+        if &response_string.find("class=\'details\'>").unwrap_or(0) != &0 {
+            let details_string = split_string(&response_string, "class=\'details\'>", "</section>\n\t\t\t<footer class").await?;
+            //Update description to have the detail from the details
+            description = sanitize(&details_string).await?;
+        }
+        //Build fields
+        let mut fields_vec: Vec<EmbedField> = [].to_vec();
+        if traits.name != "Empty" {
+            fields_vec = vec![traits];
+        }
+
+        //Pretty format for success/failure conditions.
+        description = pretty_format(description).await?;
+        if &description.len() > &2048 {
+            description = format!("{}...[more]({})", &description[..1991], req_url);
+        }
 
         let embed = Embed {
             author: None,
             color: Some(12009742),
-            description: Some(description.to_owned()),
-            fields: vec![EmbedField {
-                inline: true,
-                name: "Traits".to_owned(),
-                value: "You looked up a keyword!".to_owned()
-                },
-                EmbedField {
-                inline:true,
-                name: "Details".to_owned(),
-                value: "Static Value".to_owned()
-                }
-            ],
+            description: Some(description.to_string()), //Uses discord markdown :emoji: **bold** _italic_ __underline__ and ***bold italic***
+            fields: fields_vec,
             footer: None,
             image: None,
             kind: "rich".to_owned(),
@@ -150,7 +315,7 @@ async fn build_embed(id: &str) -> Result<Embed, Box<dyn std::error::Error>> {
         let embed = Embed {
             author: None,
             color: Some(12009742),
-            description: Some("Unable to connect to easy tools".to_owned()),
+            description: Some("Unable to connect to pf2.easytools".to_owned()),
             fields: vec![EmbedField {
                 inline: true,
                 name: "Traits".to_owned(),

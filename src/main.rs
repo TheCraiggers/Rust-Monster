@@ -103,7 +103,7 @@ async fn handle_message(
                 },
                 Ok(_) => {
                     println!("Command successful");
-                },
+                }
             }
         },
         Some(Command { name: "lookup", arguments, .. }) => {
