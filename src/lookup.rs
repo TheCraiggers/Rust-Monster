@@ -1,11 +1,10 @@
-use twilight_http:: {Client as HttpClient, request::channel::reaction::RequestReactionType};
-use twilight_model::gateway::{payload::MessageCreate, payload::ReactionAdd};
-use twilight_model::channel::{embed::{Embed, EmbedField}, ReactionType};
+use twilight_http:: {request::channel::reaction::RequestReactionType};
+use twilight_model::channel::{embed::{Embed, EmbedField}};
 use anyhow::{Result};
 use convert_case::{Case, Casing};
-use futures::stream::StreamExt;
 use tokio::time::{sleep, Duration};
 use reqwest;
+use crate::discord::{DiscordReferences, create_custom_emojis, construct_emoji};
 
 const MAX_RESULTS: i8 = 5; //Number of ambiguous results to show: up to 9
 const REACTIONS: [&str; 5] = ["\u{0031}\u{20E3}", "\u{0032}\u{20E3}", "\u{0033}\u{20E3}", "\u{0034}\u{20E3}", "\u{0035}\u{20E3}"]; //This should be the same length as MAX_RESULTS, all unicode numeric reactions
@@ -13,17 +12,18 @@ const CANCEL: &str = "\u{274C}"; //Unicode for the red X
 
 //TODO: Abstract the discord api methods. Like "build_embed_from_struct" and "send_text_message" and "send_embed_message"
 ///Lookup accepts an HttpClient, MessageCreate, and keyword String then outputs a boolean. A "true" output means that the lookup has returned it's result. A "false" output means that it has returned too many results and needs user interaction.
-pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String) -> Result<(), Box<dyn std::error::Error>> {
-    let _typing = http.create_typing_trigger(msg.channel_id).await;
+pub async fn lookup(discord_refs: &DiscordReferences<'_>, keyword: String) -> Result<(), Box<dyn std::error::Error>> {
+    let _typing = discord_refs.http.create_typing_trigger(discord_refs.msg.channel_id).await;
+    create_custom_emojis(&discord_refs).await?;
     let search_results = search_for_term(&keyword).await?;
     if &search_results.len() == &0 {
         //Can't find any results. Alert user and get out of this function.
-        http.create_message(msg.channel_id).reply(msg.id).content(format!("Sorry, couldn't find anything when searching for {}", &keyword))?.await?;
+        discord_refs.http.create_message(discord_refs.msg.channel_id).reply(discord_refs.msg.id).content(format!("Sorry, couldn't find anything when searching for {}", &keyword))?.await?;
         return Ok(());
     } else if &search_results.len() == &1 {
         //Exact match! Start building the embed and send a response
-        let embed = build_embed(&search_results).await?;
-        http.create_message(msg.channel_id).reply(msg.id).embed(embed)?.await?;
+        let embed = build_embed(discord_refs, &search_results).await?;
+        discord_refs.http.create_message(discord_refs.msg.channel_id).reply(discord_refs.msg.id).embed(embed)?.await?;
         return Ok(());
     } else {
         //Ambiguous. Ask user which of the short list they mean.
@@ -37,39 +37,39 @@ pub async fn lookup(http: &HttpClient, msg: &Box<MessageCreate>, keyword: String
         //Add cancel option
         options_string = format!("{}\n{} - Cancel", options_string, CANCEL.to_string());
 
-        let clarification = http.create_message(msg.channel_id).reply(msg.id).content(format!("Found more than one possible term. Please let me know which one to look up by simply reacting to this message with the emoji beside the desired choice.\n{}", options_string))?.await?;
+        let clarification = discord_refs.http.create_message(discord_refs.msg.channel_id).reply(discord_refs.msg.id).content(format!("Found more than one possible term. Please let me know which one to look up by simply reacting to this message with the emoji beside the desired choice.\n{}", options_string))?.await?;
         //Add reactions to allow user to select
         for option in 0..search_results.len() {
             let num = REACTIONS[option].to_string();
-            let react = http.create_reaction(clarification.channel_id, clarification.id, RequestReactionType::Unicode { name: num } ).await?;
+            let react = discord_refs.http.create_reaction(clarification.channel_id, clarification.id, RequestReactionType::Unicode { name: num } ).await?;
         }
         //React with CANCEL
-        http.create_reaction(clarification.channel_id, clarification.id, RequestReactionType::Unicode {name: CANCEL.to_string()} ).await?;
+        discord_refs.http.create_reaction(clarification.channel_id, clarification.id, RequestReactionType::Unicode {name: CANCEL.to_string()} ).await?;
 
         //THREAD SLEEP DREAD SLEEP
         for t in 0..20 {
-            let mut reaction_list = http.reactions(clarification.channel_id, clarification.id, RequestReactionType::Unicode { name: CANCEL.to_string()}).await?;
-            if reaction_list.iter().any(| UserId | UserId == &msg.author) {
-                http.delete_message(msg.channel_id, clarification.id).await?;
+            let mut reaction_list = discord_refs.http.reactions(clarification.channel_id, clarification.id, RequestReactionType::Unicode { name: CANCEL.to_string()}).await?;
+            if reaction_list.iter().any(| UserId | UserId == &discord_refs.msg.author) {
+                discord_refs.http.delete_message(discord_refs.msg.channel_id, clarification.id).await?;
                 break
             }
             for option in 0..search_results.len() {
                 let num = REACTIONS[option].to_string();
-                reaction_list = http.reactions(clarification.channel_id, clarification.id, RequestReactionType::Unicode { name: num }).await?;
-                if reaction_list.iter().any(| UserId | UserId == &msg.author) {
-                    let _typing = http.create_typing_trigger(msg.channel_id).await;
+                reaction_list = discord_refs.http.reactions(clarification.channel_id, clarification.id, RequestReactionType::Unicode { name: num }).await?;
+                if reaction_list.iter().any(| UserId | UserId == &discord_refs.msg.author) {
+                    let _typing = discord_refs.http.create_typing_trigger(discord_refs.msg.channel_id).await;
                     let response_string = &search_results[option];
                     let mut response_vec: Vec<String> = Vec::new();
                     response_vec.push(response_string.to_string());
-                    http.delete_message(msg.channel_id, clarification.id).await?;
-                    let embed = build_embed(&response_vec).await?;
-                    http.create_message(msg.channel_id).reply(msg.id).embed(embed)?.await?;
+                    discord_refs.http.delete_message(discord_refs.msg.channel_id, clarification.id).await?;
+                    let embed = build_embed(discord_refs, &response_vec).await?;
+                    discord_refs.http.create_message(discord_refs.msg.channel_id).reply(discord_refs.msg.id).embed(embed)?.await?;
                     break
                 }
             }
             sleep(Duration::from_millis(100)).await;
         }
-        http.delete_message(msg.channel_id, clarification.id).await?;
+        discord_refs.http.delete_message(discord_refs.msg.channel_id, clarification.id).await?;
 
         return Ok(());
     }
@@ -159,15 +159,15 @@ async fn sanitize(sanitize_me: &str) -> Result<String, Box<dyn std::error::Error
         } else if &slice == &"</th>" || &slice == &"</td>" {
             new_slice = "|";
         } else if slice.contains("class=\"pf2 action1\"") {
-            new_slice = " :one: ";
+            new_slice = " :1_action: ";
         } else if slice.contains("class=\"pf2 action2\"") {
-            new_slice = " :two: ";
+            new_slice = " :2_actions: ";
         } else if slice.contains("class=\"pf2 action3\"") {
-            new_slice = " :three: ";
+            new_slice = " :3_actions: ";
         } else if slice.contains("class=\"pf2 Reaction\"") {
-            new_slice = " :arrow_heading_down: ";
+            new_slice = " :reaction: ";
         } else if slice.contains("class=\"pf2 actionF\"") {
-            new_slice = " :free: ";
+            new_slice = " :free_action: ";
         }
         return_string = return_string.replace(slice, new_slice);
     }
@@ -229,7 +229,7 @@ async fn search_for_term(term: &str) -> Result<Vec<String>, Box<dyn std::error::
 
 ///build_embed uses an id to find the specific result. Then builds an embed.
 ///The embed should use Title, Traits, Details, Description, and URL
-async fn build_embed(result: &Vec<String>) -> Result<Embed, Box<dyn std::error::Error>> {
+async fn build_embed(discord_refs: &DiscordReferences<'_>, result: &Vec<String>) -> Result<Embed, Box<dyn std::error::Error>> {
     let id = extract_id(&result).await?;
     let req_body:String = format!("id={}", id);
     let req_url:String = format!("https://pf2.easytool.es/index.php?id={}", &id);
@@ -289,12 +289,26 @@ async fn build_embed(result: &Vec<String>) -> Result<Embed, Box<dyn std::error::
             fields_vec = vec![traits];
         }
 
+        //Replace emojis after all the formatting is said and done
+        let one_action = construct_emoji(discord_refs, "1_action".to_string()).await?;
+        let two_actions = construct_emoji(discord_refs, "2_actions".to_string()).await?;
+        let three_actions = construct_emoji(discord_refs, "3_actions".to_string()).await?;
+        let free_action = construct_emoji(discord_refs, "free_action".to_string()).await?;
+        let reaction = construct_emoji(discord_refs, "reaction".to_string()).await?;
+        
+        description = str::replace(&description, ":1_action:", &one_action);
+        description = str::replace(&description, ":2_actions:", &two_actions);
+        description = str::replace(&description, ":3_actions:", &three_actions);
+        description = str::replace(&description, ":free_action:", &free_action);
+        description = str::replace(&description, ":reaction:", &reaction);
+
         //Pretty format for success/failure conditions.
         description = pretty_format(description).await?;
         if &description.len() > &2048 {
             description = format!("{}...[more]({})", &description[..1991], req_url);
         }
 
+        //Finally actually build the embed
         let embed = Embed {
             author: None,
             color: Some(12009742),
