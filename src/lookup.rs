@@ -144,7 +144,7 @@ async fn sanitize(sanitize_me: &str) -> Result<String, Box<dyn std::error::Error
         let mut new_slice = "";
         //TODO: use custom emojis like https://github.com/Rapptz/discord.py/issues/390 instead of :one:, :two:, etc.
         //Use http.get_emojis and http.create_emoji to accomplish this in bot setup. Then get the id of the emojis and store them as public consts.
-        if &slice == &"<p>" || &slice == &"<p class=\"fancy\">" || slice.contains("/h3") || &slice == &"<tr>" {
+        if &slice == &"<p>" || slice.contains("<p class=") || slice.contains("/h3") || &slice == &"<tr>" {
             new_slice = "\n";
         } else if &slice == &"</section>" {
             new_slice = "\n------------";
