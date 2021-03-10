@@ -24,8 +24,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut config = CommandParserConfig::new();
     config.add_prefix("!");
     config.add_prefix("! ");    //For mobile users like me. Android puts a space after ! because it's punctuation
-    config.add_command("omni", false);
-    config.add_command("lookup", false);
+    for verb in command_words::VERBS.iter() {
+        config.add_command(verb.word, false);
+    }
     let parser = Parser::new(config);
     
     //Useful for Discord debugging if DEBUG=true.
