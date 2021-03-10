@@ -13,6 +13,7 @@ pub mod discord;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+mod command_words;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
