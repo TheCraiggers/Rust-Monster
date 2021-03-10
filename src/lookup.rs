@@ -6,8 +6,8 @@ use tokio::time::{sleep, Duration};
 use reqwest;
 use crate::discord::{DiscordReferences, create_custom_emojis, construct_emoji};
 
-const MAX_RESULTS: i8 = 5; //Number of ambiguous results to show: up to 9
-const REACTIONS: [&str; 5] = ["\u{0031}\u{20E3}", "\u{0032}\u{20E3}", "\u{0033}\u{20E3}", "\u{0034}\u{20E3}", "\u{0035}\u{20E3}"]; //This should be the same length as MAX_RESULTS, all unicode numeric reactions
+const MAX_RESULTS: i8 = 9; //Number of ambiguous results to show: up to 9
+const REACTIONS: [&str; 9] = ["\u{0031}\u{20E3}", "\u{0032}\u{20E3}", "\u{0033}\u{20E3}", "\u{0034}\u{20E3}", "\u{0035}\u{20E3}", "\u{0036}\u{20E3}", "\u{0037}\u{20E3}", "\u{0038}\u{20E3}", "\u{0039}\u{20E3}"]; //This should be the same length as MAX_RESULTS, all unicode numeric reactions
 const CANCEL: &str = "\u{274C}"; //Unicode for the red X
 
 //TODO: Abstract the discord api methods. Like "build_embed_from_struct" and "send_text_message" and "send_embed_message"
@@ -144,7 +144,7 @@ async fn sanitize(sanitize_me: &str) -> Result<String, Box<dyn std::error::Error
         let mut new_slice = "";
         //TODO: use custom emojis like https://github.com/Rapptz/discord.py/issues/390 instead of :one:, :two:, etc.
         //Use http.get_emojis and http.create_emoji to accomplish this in bot setup. Then get the id of the emojis and store them as public consts.
-        if &slice == &"<p>" || slice.contains("<p class=") || slice.contains("/h3") || &slice == &"<tr>" {
+        if &slice == &"<p>" || slice.contains("<p class=") || slice.contains("/h3") || &slice == &"<tr>" || slice.contains("<aside ") {
             new_slice = "\n";
         } else if &slice == &"</section>" {
             new_slice = "\n------------";
