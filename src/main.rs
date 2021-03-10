@@ -107,7 +107,7 @@ async fn handle_message(
             }
         },
         Some(Command { name: "lookup", arguments, .. }) => {
-            &lookup::lookup(&http, &msg, arguments.as_str().to_string()).await;
+            &lookup::lookup(&discord_refs, arguments.as_str().to_string()).await;
         }
         //Ignore anything that doesn't match the commands above.
         Some(_) => {},
