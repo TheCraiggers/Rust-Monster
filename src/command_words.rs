@@ -26,14 +26,12 @@ pub struct Word<'a> {
     pub word: &'a str,
     pub short_help: &'a str,
     pub long_help: &'a str,
+    pub usage_examples: &'a str,
 }
 
 impl Word<'_> {
     pub fn embed_title(&self) -> String {
         format!("Help for {}", self.word)
-    }
-    pub fn help_embed(&self) {
-        todo!();
     }
 }
 
@@ -48,12 +46,14 @@ pub const VERBS: [Word; 2] = [
         kind: WordType::Verb,
         short_help: "Get help on any bot command or term",
         long_help: "Use the help command to get detailed help about any command word the bot recognizes. Which you probably already knew, since you just typed `!help help`. Clever girl.",
+        usage_examples: "!help roll\n!help effect\n!help lookup",
     },
     Word{
         word: "lookup",
         kind: WordType::Verb,
         short_help: "Get definitions of feats, spells, rules, etc",
-        long_help: "The lookup command can look up the definitions of just about any Pathfinder thing there is, using the power of the Pathfinder 2 Easy Library. Feats, skills, spells, creatures, gods, you name it.",
+        long_help: "The lookup command can look up the definitions of just about any Pathfinder thing there is, using the power of the Pathfinder 2 Easy Library. Feats, skills, spells, creatures, gods, you name it. If searching terns up more than one result, a list of options will be presented to you as reaction buttons to click. Simply click the correct button to select your choice.",
+        usage_examples: "!lookup mage hand\n!lookup goblin dog\n!lookup cast a spell",
     },
 ];
 
@@ -77,6 +77,15 @@ mod tests {
         for words_array in ALL_WORDS.iter() {
             for word in words_array.iter() {
                 assert!(word.embed_title().chars().count() < 256)
+            }
+        }
+    }
+    #[test]
+    fn embed_description_sizes() {
+        //! Discord prohibts embed descriptions from being larger than 2048 chars
+        for words_array in ALL_WORDS.iter() {
+            for word in words_array.iter() {
+                assert!(word.long_help.chars().count() < 2048)
             }
         }
     }
