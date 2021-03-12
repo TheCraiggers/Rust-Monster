@@ -48,7 +48,7 @@ impl DiscordReferences<'_> {
         let embed = EmbedBuilder::new()
             .description(help_word.embed_title())?
             .field(EmbedFieldBuilder::new("Description", help_word.long_help)?)
-            .field(EmbedFieldBuilder::new("Usage examples", "examples would go here\nand here")?.inline())
+            .field(EmbedFieldBuilder::new("Usage examples", help_word.usage_examples)?.inline())
             .build()?;
         
         let private_channel = self.http.create_private_channel(self.msg.author.id).await?;
