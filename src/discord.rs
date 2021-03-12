@@ -6,12 +6,13 @@
 
 use omni::{Omnidata};
 use twilight_http::Client as HttpClient;
-use twilight_model::{channel::{ChannelType::GuildCategory, GuildChannel}, gateway::{payload::MessageCreate}, guild::{Emoji}};
+use twilight_model::{channel::{ChannelType::GuildCategory, GuildChannel}, gateway::{payload::MessageCreate}, guild::{Emoji}, id::MessageId};
 use anyhow::{Context, Result, anyhow};
-use crate::omni;
+use crate::{command_words::Word, omni};
 use reqwest;
 use futures;
 use core::mem::size_of_val;
+use twilight_embed_builder::{EmbedBuilder, EmbedFieldBuilder};
 
 pub const BOT_DATA_CHANNEL_CATEGORY_NAME: &str = "rust-monster-bot-data";
 pub const BOT_DATA_CHANNEL_NAME: &str = "omni-bot-data";
@@ -26,12 +27,38 @@ pub struct DiscordReferences<'a> {
 }
 
 impl DiscordReferences<'_> {
+    /// Sends a text message to the same guild/channel
     pub async fn send_message(&self, text: &str) -> Result<()>{
         match self.http.create_message(self.msg.channel_id).content(text)?.await {
             Ok(_) => Ok(()),
             Err(e) => Err(anyhow!(e.to_string()))
         }
     }
+
+    /// Sends a text message to the same guild/channel, but also makes it a reply to the original sender
+    pub async fn send_message_reply(&self, text: &str) -> Result<()>{
+        match self.http.create_message(self.msg.channel_id).reply(self.msg.id).content(text)?.await {
+            Ok(_) => Ok(()),
+            Err(e) => Err(anyhow!(e.to_string()))
+        }
+    }
+
+    /// Sends a private DM to the user containing help about a bot command or keyword
+    pub async fn dm_help_message(&self, help_word: &Word<'_>) -> Result<()> {
+        let embed = EmbedBuilder::new()
+            .description(help_word.embed_title())?
+            .field(EmbedFieldBuilder::new("Description", help_word.long_help)?)
+            .field(EmbedFieldBuilder::new("Usage examples", "examples would go here\nand here")?.inline())
+            .build()?;
+        
+        let private_channel = self.http.create_private_channel(self.msg.author.id).await?;
+            
+        match self.http.create_message(private_channel.id).embed(embed)?.await {
+            Ok(_) => Ok(()),
+            Err(e) => Err(anyhow!(e.to_string()))
+        }
+    }
+    
 }
 
 /// This is an idempotent function that will create the channels to house all bot data and a category to contain them.
