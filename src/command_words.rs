@@ -11,7 +11,7 @@ pub async fn handle_help_command(discord_refs: &DiscordReferences<'_>, help_term
         Ok(())
     } else {
         for words_array in ALL_WORDS.iter() {
-            match words_array.iter().find(|&word| word.word == help_term) {
+            match words_array.iter().find(|&word| word.term == help_term) {
                 Some(word) => { return Ok(discord_refs.dm_help_message(&word).await?)}
                 None => { continue; }
             };
@@ -29,7 +29,7 @@ enum WordType {
 
 pub struct Word<'a> {
     kind: WordType,
-    pub word: &'a str,
+    pub term: &'a str,
     pub short_help: &'a str,
     pub long_help: &'a str,
     pub usage_examples: &'a str,
@@ -37,15 +37,15 @@ pub struct Word<'a> {
 
 impl Word<'_> {
     pub fn embed_title(&self) -> String {
-        format!("Help for {}", self.word)
+        format!("Help for {}", self.term)
     }
 }
 
 fn generate_generic_help_message() -> String {
     let mut response: String = "Most commands take the form of `!verb noun target`, where target is usually the name of a character. The following words/commands are known to the bot. You can use `!help <word>` for more info about any of these:\n\n".to_string();
-    let verb_list: Vec<String> = VERBS.iter().map(|word| word.word.to_string()).collect();
-    let noun_list: Vec<String> = NOUNS.iter().map(|word| word.word.to_string()).collect();
-    let target_list: Vec<String> = TARGETS.iter().map(|word| word.word.to_string()).collect();
+    let verb_list: Vec<String> = VERBS.iter().map(|word| word.term.to_string()).collect();
+    let noun_list: Vec<String> = NOUNS.iter().map(|word| word.term.to_string()).collect();
+    let target_list: Vec<String> = TARGETS.iter().map(|word| word.term.to_string()).collect();
     response.push_str(&format!("**Verbs:** {}\n", verb_list.join(", ")));
     response.push_str(&format!("**Nouns:** {}\n", noun_list.join(", ")));
     response.push_str(&format!("**Targets:** {}\n", target_list.join(", ")));
@@ -60,14 +60,14 @@ const ALL_WORDS: [&[Word];3] = [&VERBS,&NOUNS,&TARGETS];
 ///////////////////////////////////////////////////////
 pub const VERBS: [Word; 2] = [
     Word{
-        word: "help",
+        term: "help",
         kind: WordType::Verb,
         short_help: "Get help on any bot command or term",
         long_help: "Use the help command to get detailed help about any command word the bot recognizes. Which you probably already knew, since you just typed `!help help`. Clever girl.",
         usage_examples: "!help roll\n!help effect\n!help lookup",
     },
     Word{
-        word: "lookup",
+        term: "lookup",
         kind: WordType::Verb,
         short_help: "Get definitions of feats, spells, rules, etc",
         long_help: "The lookup command can look up the definitions of just about any Pathfinder thing there is, using the power of the Pathfinder 2 Easy Library. Feats, skills, spells, creatures, gods, you name it. If searching terns up more than one result, a list of options will be presented to you as reaction buttons to click. Simply click the correct button to select your choice.",

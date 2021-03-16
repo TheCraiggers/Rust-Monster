@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     config.add_prefix("!");
     config.add_prefix("! ");    //For mobile users like me. Android puts a space after ! because it's punctuation
     for verb in command_words::VERBS.iter() {
-        config.add_command(verb.word, false);
+        config.add_command(verb.term, false);
     }
     let parser = Parser::new(config);
     
