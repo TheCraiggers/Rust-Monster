@@ -14,6 +14,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 mod command_words;
+mod dice;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -113,6 +114,9 @@ async fn handle_message(
         },
         Some(Command { name: "help", arguments, .. }) => {
             command_words::handle_help_command(&discord_refs, arguments.as_str()).await;
+        },
+        Some(Command { name: "roll", arguments, .. }) => {
+            dice::handle_command(&discord_refs, Arc::clone(&omnidata_cache), arguments.as_str()).await;
         },
         //Ignore anything that doesn't match the commands above.
         Some(_) => {},

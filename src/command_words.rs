@@ -58,7 +58,7 @@ const ALL_WORDS: [&[Word];3] = [&VERBS,&NOUNS,&TARGETS];
 ///////////////////////////////////////////////////////
 // VERBS 
 ///////////////////////////////////////////////////////
-pub const VERBS: [Word; 2] = [
+pub const VERBS: [Word; 3] = [
     Word{
         term: "help",
         kind: WordType::Verb,
@@ -72,6 +72,13 @@ pub const VERBS: [Word; 2] = [
         short_help: "Get definitions of feats, spells, rules, etc",
         long_help: "The lookup command can look up the definitions of just about any Pathfinder thing there is, using the power of the Pathfinder 2 Easy Library. Feats, skills, spells, creatures, gods, you name it. If searching terns up more than one result, a list of options will be presented to you as reaction buttons to click. Simply click the correct button to select your choice.",
         usage_examples: "!lookup mage hand\n!lookup goblin dog\n!lookup cast a spell",
+    },
+    Word{
+        term: "roll",
+        kind: WordType::Verb,
+        short_help: "Roll some dice",
+        long_help: "The roll command can be used to roll discrete dice and/or a stored property on a character. If a character is not supplied, it defaults to the character owned by you. If you own multiple, and you're in combaat, it defaults to the active character.",
+        usage_examples: "!roll 3d6+5\n!roll perception",
     },
 ];
 
