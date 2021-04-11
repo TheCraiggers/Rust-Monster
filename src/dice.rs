@@ -11,7 +11,7 @@ pub async fn handle_command(
     omnidata_cache: Arc<Mutex<Option<Omnidata>>>,
     arguments: &str,
 ) -> Result<()> {
-    let foo = roll_lib::roll_inline(arguments, false);
-    discord_refs.send_message_reply(&format!("{:?}", &foo)).await?;
+    let roll = roll_lib::roll_inline(arguments, true).unwrap();
+    discord_refs.send_message_reply(&format!("{}", &roll.string_result)).await?;
     Ok(())
 }
