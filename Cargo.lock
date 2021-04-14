@@ -1056,8 +1056,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "roll-lib"
-version = "0.1.0"
+name = "roll-rs"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3784890d00a9e27bf495529d23f962c10aa60df370f7988532f6cbc7608a7fb5"
 dependencies = [
  "rand_core 0.5.1",
 ]
@@ -1070,7 +1072,7 @@ dependencies = [
  "convert_case",
  "futures",
  "reqwest",
- "roll-lib",
+ "roll-rs",
  "serde",
  "serde_json",
  "time",

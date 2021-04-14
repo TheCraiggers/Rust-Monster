@@ -99,16 +99,6 @@ async fn handle_message(
     let discord_refs: DiscordReferences = DiscordReferences {http: &http, msg: &msg};
 
     match parser.parse(&msg.content) {
-        Some(Command { name: "omni", arguments, .. }) => {
-            match omni::handle_command(&discord_refs, Arc::clone(&omnidata_cache), arguments.as_str()).await {
-                Err(error) => {
-                    println!("Command failed with error: {:?}", error);
-                },
-                Ok(_) => {
-                    println!("Command successful");
-                }
-            }
-        },
         Some(Command { name: "lookup", arguments, .. }) => {
             &lookup::lookup(&discord_refs, arguments.as_str().to_string()).await;
         },
@@ -116,7 +106,7 @@ async fn handle_message(
             command_words::handle_help_command(&discord_refs, arguments.as_str()).await;
         },
         Some(Command { name: "roll", arguments, .. }) => {
-            dice::handle_command(&discord_refs, Arc::clone(&omnidata_cache), arguments.as_str()).await;
+            omni::handle_command(&discord_refs, Arc::clone(&omnidata_cache), "roll", arguments.as_str()).await;
         },
         //Ignore anything that doesn't match the commands above.
         Some(_) => {},

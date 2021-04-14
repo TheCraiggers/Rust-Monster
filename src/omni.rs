@@ -5,6 +5,7 @@ use crate::discord::{DiscordReferences};
 use anyhow::{Result, anyhow};
 use std::{sync::Arc, u16};
 use futures::{TryFutureExt, lock::Mutex};
+use roll_rs::roll_inline;
 
 const OMNI_VERSION: u16 = 0;
 
@@ -42,6 +43,7 @@ impl Omnidata {
 pub async fn handle_command(
     discord_refs: &DiscordReferences<'_>, 
     omnidata_cache: Arc<Mutex<Option<Omnidata>>>,
+    command: &str,
     arguments: &str,
 ) -> Result<()> {
     
@@ -61,9 +63,12 @@ pub async fn handle_command(
     let omnidata = omnidata_guard.as_mut().unwrap();
 
     // Do whatever the user requested us to do
-    // TODO: Add method to figure out what the user wants. For now, let's add a character.
-    omnidata.add_character("me");
+    match command {
+        "roll" => handle_roll_command(discord_refs, omnidata, arguments).await,
+        _ => { println!("Somehow an invalid command was passed to omni::handle_command") }
+    }
     
+    //Save the data
     let reply_msg = discord_refs.http.create_message(discord_refs.msg.channel_id).reply(discord_refs.msg.id).content(format!("This is your reply for {}", arguments))?.map_err(|e| anyhow!("Problem creating reply! {:?}", e.to_string()));
     let save = discord::omni_data_save(&discord_refs, &omnidata);
     match futures::try_join!(reply_msg, save) {
@@ -76,6 +81,11 @@ pub async fn handle_command(
             return Err(anyhow!("Save failed with error: {:?}", e.to_string()));
         }
     }
+}
+
+async fn handle_roll_command(discord_refs: &DiscordReferences<'_>, omnidata: &Omnidata, arguments: &str) {
+    let roll = roll_inline(arguments, true).unwrap();
+    discord_refs.send_message_reply(&format!("{}", &roll.string_result)).await;
 }
 
 #[cfg(test)]
