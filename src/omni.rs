@@ -111,4 +111,10 @@ mod tests {
         omnidata.dirty();
         assert_eq!(omnidata.is_dirty, true);
     }
+
+    #[test]
+    fn dice_string() {
+        let roll = roll_inline("1d4", false).unwrap();
+        assert!(roll.string_result.contains("="));
+    }
 }
