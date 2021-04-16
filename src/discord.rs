@@ -28,16 +28,16 @@ pub struct DiscordReferences<'a> {
 
 impl DiscordReferences<'_> {
     /// Sends a text message to the same guild/channel
-    pub async fn send_message(&self, text: &str) -> Result<()>{
-        match self.http.create_message(self.msg.channel_id).content(text)?.await {
+    pub async fn send_message<Text: AsRef<str>>(&self, text: Text) -> Result<()>{
+        match self.http.create_message(self.msg.channel_id).content(text.as_ref())?.await {
             Ok(_) => Ok(()),
             Err(e) => Err(anyhow!(e.to_string()))
         }
     }
 
     /// Sends a text message to the same guild/channel, but also makes it a reply to the original sender
-    pub async fn send_message_reply(&self, text: &str) -> Result<()>{
-        match self.http.create_message(self.msg.channel_id).reply(self.msg.id).content(text)?.await {
+    pub async fn send_message_reply<Text: AsRef<str>>(&self, text: Text) -> Result<()>{
+        match self.http.create_message(self.msg.channel_id).reply(self.msg.id).content(text.as_ref())?.await {
             Ok(_) => Ok(()),
             Err(e) => Err(anyhow!(e.to_string()))
         }
