@@ -3,9 +3,10 @@ use crate::{discord, omni::character::Character};
 use serde::{Deserialize, Serialize};
 use crate::discord::{DiscordReferences};
 use anyhow::{Result, anyhow};
-use std::{sync::Arc, u16};
-use futures::{TryFutureExt, lock::Mutex};
+use std::{pin::Pin, sync::Arc, u16};
+use futures::{Future, TryFutureExt, lock::Mutex};
 use roll_rs::roll_inline;
+use twilight_http::Client;
 
 const OMNI_VERSION: u16 = 0;
 
@@ -60,16 +61,16 @@ pub async fn handle_command(
             }
         }
     }
-    let omnidata = omnidata_guard.as_mut().unwrap();
+    let omnidata: &mut Omnidata = omnidata_guard.as_mut().unwrap();
 
     // Do whatever the user requested us to do
-    match command {
-        "roll" => handle_roll_command(discord_refs, omnidata, arguments).await,
-        _ => { println!("Somehow an invalid command was passed to omni::handle_command") }
-    }
+    let response = match command {
+        "roll" => Some(handle_roll_command(discord_refs, omnidata, arguments)),
+        _ => None
+    };
     
-    //Save the data
-    let reply_msg = discord_refs.http.create_message(discord_refs.msg.channel_id).reply(discord_refs.msg.id).content(format!("This is your reply for {}", arguments))?.map_err(|e| anyhow!("Problem creating reply! {:?}", e.to_string()));
+    //Save the data and send the reply returned from the function that handled the command. These both happen at the same time to make things snappier.
+    let reply_msg = response.unwrap().map_err(|e| anyhow!("Problem creating reply! {:?}", e.to_string()));
     let save = discord::omni_data_save(&discord_refs, &omnidata);
     match futures::try_join!(reply_msg, save) {
         Ok((_,_)) => {
@@ -83,9 +84,14 @@ pub async fn handle_command(
     }
 }
 
-async fn handle_roll_command(discord_refs: &DiscordReferences<'_>, omnidata: &Omnidata, arguments: &str) {
-    let roll = roll_inline(arguments, true).unwrap();
-    discord_refs.send_message_reply(&format!("{}", &roll.string_result)).await;
+/// Handle simple roll commands. Arguments parameter should contain what to roll.
+/// Return is a Future containing the message back to the user with the results.
+fn handle_roll_command<'a, 'message:'a>(discord_refs: &'a DiscordReferences<'message>, omnidata: &Omnidata, arguments: &str) -> Pin<Box<dyn Future<Output=Result<()>> + Send + 'a>> {
+    // TODO: Call a function that will resolve any named stats in the dice notation for the character being rolled, for example !roll reflex
+    match roll_inline(arguments, false) {
+        Ok(roll) => Box::pin(discord_refs.send_message_reply(format!("```\n{}```", roll.string_result))),
+        Err(err) => Box::pin(discord_refs.send_message_reply(format!("```\n{}```", err)))
+    }
 }
 
 #[cfg(test)]
