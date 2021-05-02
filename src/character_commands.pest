@@ -1,0 +1,8 @@
+WHITESPACE = _{ " " }
+
+word = @{ ("\"" ~ (ASCII_ALPHANUMERIC | " ")+ ~ "\"") | ASCII_ALPHANUMERIC+ }
+noun = @{ word }
+target = @{ word }
+properties = @{ word }
+
+add_character = { noun ~ target ~ properties* }

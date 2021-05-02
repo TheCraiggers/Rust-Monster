@@ -6,7 +6,12 @@ use anyhow::{Result, anyhow};
 use std::{pin::Pin, sync::Arc, u16};
 use futures::{Future, TryFutureExt, lock::Mutex};
 use roll_rs::roll_inline;
-use twilight_http::Client;
+use pest::Parser;
+use crate::omni::character::add_character;
+
+#[derive(Parser)]
+#[grammar = "omni_commands.pest"]
+pub struct OmniCommandParser;
 
 const OMNI_VERSION: u16 = 0;
 
@@ -29,27 +34,18 @@ impl Omnidata {
     fn dirty(&mut self) {
         self.is_dirty = true;
     }
-
-    fn add_character(&mut self, name: &str) {
-        self.characters.push(Character {
-            name: name.to_string(),
-            kind: character::CharacterKind::Npc,
-            owner: "foo".to_string(),
-            effects: Vec::new(),
-        });
-        self.dirty();        
-    }
 }
 
+/// Entry point for all bot commands that deal with the tracker data and characters
 pub async fn handle_command(
     discord_refs: &DiscordReferences<'_>, 
     omnidata_cache: Arc<Mutex<Option<Omnidata>>>,
     command: &str,
     arguments: &str,
 ) -> Result<()> {
-    
-    // Lock the cached botdata. This should prevent any othe commands from being run on this guild
-    // If it doesn't exist, get the data from the guild and cache itfs.msg.guild_id);
+
+    // Lock the cached botdata. This should prevent any other commands from being run on this guild
+    // If it doesn't exist, get the data from the guild and cache it
     let mut omnidata_guard = omnidata_cache.lock().await;
     if omnidata_guard.is_none() {
         *omnidata_guard = match discord::get_tracker(&discord_refs).await {
@@ -63,8 +59,9 @@ pub async fn handle_command(
     }
     let omnidata: &mut Omnidata = omnidata_guard.as_mut().unwrap();
 
-    // Do whatever the user requested us to do
+    // Do whatever the user requested us to do. First we'll match by verb and let the following function handle the rest.
     let response = match command {
+        "add" => Some(handle_add_command(discord_refs, omnidata, arguments)),
         "roll" => Some(handle_roll_command(discord_refs, omnidata, arguments)),
         _ => None
     };
@@ -81,6 +78,30 @@ pub async fn handle_command(
             println!("Save failed with error: {:?}", e.to_string());
             return Err(anyhow!("Save failed with error: {:?}", e.to_string()));
         }
+    }
+}
+
+/// Given a string of arguments, this will parse and return the noun aka the first word.
+/// Word, in this case, is the first thing surrounded by spaces, or a quoted string with
+/// zero or more words and spaces inside. This will automatically strip any quotes.
+fn get_noun(arguments: &str) -> Result<String> {
+    let parsed = OmniCommandParser::parse(Rule::generic_command, arguments);
+    println!("Parsing '{}'", arguments);
+    match parsed {
+        Ok(pairs) => Ok(pairs.peek().unwrap().into_inner().peek().unwrap().as_str().replace("\"", "")),
+        Err(e) => Err(anyhow!("Couldn't parse command."))
+    }
+}
+
+/// Handle all ADD commands, although mostly that just involves figuring out what should be added and calling the correct function.
+fn handle_add_command<'a, 'message:'a>(discord_refs: &'a DiscordReferences<'message>, omnidata: &mut Omnidata, arguments: &str) -> Pin<Box<dyn Future<Output=Result<()>> + Send + 'a>> {
+    let noun = get_noun(arguments);
+    if noun.is_err() {
+        return Box::pin(discord_refs.send_message_reply("Failed to parse command. Remember the add command should follow the verb-noun-target syntax. For more help, consult `!help add`."));
+    }
+    match get_noun(arguments).unwrap().as_str() {
+        "player" | "enemy" => add_character(discord_refs, omnidata, arguments),
+        unknown => return Box::pin(discord_refs.send_message_reply(format!("Sorry, I don't know how to add a '{}'. For more help, consult `!help add`.", unknown))),
     }
 }
 
@@ -116,5 +137,11 @@ mod tests {
     fn dice_string() {
         let roll = roll_inline("1d4", false).unwrap();
         assert!(roll.string_result.contains("="));
+    }
+
+    #[test]
+    fn noun_parser() {
+        assert_eq!(get_noun("player Plunk HP:30").unwrap(), "player");
+        assert_eq!(get_noun("enemy \"War Boss\"").unwrap(), "War Boss");
     }
 }

@@ -15,6 +15,10 @@ use std::sync::Arc;
 use std::time::Duration;
 mod command_words;
 mod dice;
+extern crate pest;
+
+#[macro_use]
+extern crate pest_derive;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -98,6 +102,7 @@ async fn handle_message(
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let discord_refs: DiscordReferences = DiscordReferences {http: &http, msg: &msg};
 
+    
     match parser.parse(&msg.content) {
         Some(Command { name: "lookup", arguments, .. }) => {
             &lookup::lookup(&discord_refs, arguments.as_str().to_string()).await;
@@ -107,6 +112,9 @@ async fn handle_message(
         },
         Some(Command { name: "roll", arguments, .. }) => {
             omni::handle_command(&discord_refs, Arc::clone(&omnidata_cache), "roll", arguments.as_str()).await;
+        },
+        Some(Command { name: "add", arguments, .. }) => {
+            omni::handle_command(&discord_refs, Arc::clone(&omnidata_cache), "add", arguments.as_str()).await;
         },
         //Ignore anything that doesn't match the commands above.
         Some(_) => {},

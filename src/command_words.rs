@@ -58,7 +58,14 @@ const ALL_WORDS: [&[Word];3] = [&VERBS,&NOUNS,&TARGETS];
 ///////////////////////////////////////////////////////
 // VERBS 
 ///////////////////////////////////////////////////////
-pub const VERBS: [Word; 3] = [
+pub const VERBS: [Word; 4] = [
+    Word{
+        term: "add",
+        kind: WordType::Verb,
+        short_help: "Add a new <noun>",
+        long_help: "Use the add command to add a new <noun>, such as an enemy, or something like an effect to a player. Most nouns are supported, but consult the help pages for each for specifics about adding them.",
+        usage_examples: "!add player Plunk\n!add enemy Slurk",
+    },
     Word{
         term: "help",
         kind: WordType::Verb,
@@ -85,7 +92,15 @@ pub const VERBS: [Word; 3] = [
 ///////////////////////////////////////////////////////
 // Nouns 
 ///////////////////////////////////////////////////////
-pub const NOUNS: [Word; 0] = [];
+pub const NOUNS: [Word; 1] = [
+    Word{
+        term: "enemy",
+        kind: WordType::Noun,
+        short_help: "Enemies are characters whose stats are hidden from players",
+        long_help: "Enemies are typically GM controlled characters and serve as things for a <player> for fight. They behave much like player characters in that they have stats, can roll dice, take damage, etc. Where they differ is that their stats are automatically hidden or obfuscated from those without the GM role.",
+        usage_examples: "!remove enemy Goblin\n!add enemy Slurk",
+    },
+];
 
 ///////////////////////////////////////////////////////
 // TARGETS
