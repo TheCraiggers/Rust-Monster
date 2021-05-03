@@ -86,9 +86,12 @@ pub async fn handle_command(
 /// zero or more words and spaces inside. This will automatically strip any quotes.
 fn get_noun(arguments: &str) -> Result<String> {
     let parsed = OmniCommandParser::parse(Rule::generic_command, arguments);
-    println!("Parsing '{}'", arguments);
     match parsed {
-        Ok(pairs) => Ok(pairs.peek().unwrap().into_inner().peek().unwrap().as_str().replace("\"", "")),
+        Ok(mut pairs) => {
+            let mut command_words = pairs.next().unwrap().into_inner(); // Go into OmniCommand
+            let noun = command_words.next().unwrap();                    // First word should be a noun
+            Ok(noun.as_str().replace("\"", ""))                            // Commands can have quotes, but we don't want them in the output
+        },
         Err(e) => Err(anyhow!("Couldn't parse command."))
     }
 }
@@ -142,6 +145,6 @@ mod tests {
     #[test]
     fn noun_parser() {
         assert_eq!(get_noun("player Plunk HP:30").unwrap(), "player");
-        assert_eq!(get_noun("enemy \"War Boss\"").unwrap(), "War Boss");
+        assert_eq!(get_noun("enemy \"War Boss\" HP:30").unwrap(), "enemy");
     }
 }
