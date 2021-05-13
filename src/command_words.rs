@@ -92,7 +92,7 @@ pub const VERBS: [Word; 4] = [
 ///////////////////////////////////////////////////////
 // Nouns 
 ///////////////////////////////////////////////////////
-pub const NOUNS: [Word; 1] = [
+pub const NOUNS: [Word; 2] = [
     Word{
         term: "enemy",
         kind: WordType::Noun,
@@ -100,6 +100,13 @@ pub const NOUNS: [Word; 1] = [
         long_help: "Enemies are typically GM controlled characters and serve as things for a <player> for fight. They behave much like player characters in that they have stats, can roll dice, take damage, etc. Where they differ is that their stats are automatically hidden or obfuscated from those without the GM role.",
         usage_examples: "!remove enemy Goblin\n!add enemy Slurk",
     },
+    Word{
+        term: "stat",
+        kind: WordType::Noun,
+        short_help: "Information about a character like HP or attacks",
+        long_help: "A stat can be almost anything. Use stats to remember your HP, level, focus points, or store complex dice rolls. A stat can either be static or dynamic.\n\nStatic stats are those with a value that only changes when you tell it to change, such as your level or hero points. When creating a static stat, simply give the name and the value seperated by a colon. If dice notation or references are included, they are resolved immediately and only the final result is stored.\n\nDynamic stats are a whole different beast. Their value is stored as a dice roll and can reference other stats. When you ask the bot to roll or otherwise return the value, it will *dynamically* compute it, rolling any dice and resolving any references needed. These are often used for things like attack rolls or saves. Dynamic stats are created like static, only prefix an equal sign before the value, like an Excel formula.\n\nStats can also be ranges with a maximum value, such as HP. To give a stat a maximum value, include a forward slash after the value, followed by the maximum. The maximum is only adjusted when the bot is asked to, so future set commands will only adjust the value unless the maximum is also given.",
+        usage_examples: "!add stat Bob HP:35/35\n!set stat Bob HP:20\n!add stat Frank Reflex:=1d20+DEX\n!set stat Bob Level:5\n!roll stat Frank Reflex",
+    }
 ];
 
 ///////////////////////////////////////////////////////

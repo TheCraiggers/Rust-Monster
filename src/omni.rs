@@ -81,10 +81,31 @@ pub async fn handle_command(
     }
 }
 
+/// Given a string of arguments, this will parse and return the target aka the second word.
+/// Word, in this case, is the first thing surrounded by spaces, or a quoted string with
+/// zero or more words and spaces inside. This will automatically strip any quotes.
+fn get_character_from_command<'message>(omnidata: &'message mut Omnidata, arguments: &str) -> Result<&'message mut Character> {
+    let parsed = OmniCommandParser::parse(Rule::generic_command, arguments);
+    match parsed {
+        Ok(mut pairs) => {
+            let mut command_words = pairs.next().unwrap().into_inner();  // Go into OmniCommand
+            let target = command_words.nth(1).unwrap();                   // Second word should be a target
+            let target_name = target.as_str().replace("\"", "");    // Commands can have quotes, but we don't want them in the output
+
+            let found_character: Option<&mut Character> = omnidata.characters.iter_mut().find(|character| character.name.to_lowercase() == target_name);
+            if found_character.is_none() {
+                return Err(anyhow!(format!("Couldn't find a character with '{}' for a name. Check your spelling.",target_name)));
+            }
+            Ok(found_character.unwrap())
+        },
+        Err(e) => Err(anyhow!("Couldn't parse command."))
+    }
+}
+
 /// Given a string of arguments, this will parse and return the noun aka the first word.
 /// Word, in this case, is the first thing surrounded by spaces, or a quoted string with
 /// zero or more words and spaces inside. This will automatically strip any quotes.
-fn get_noun(arguments: &str) -> Result<String> {
+fn get_noun_from_command(arguments: &str) -> Result<String> {
     let parsed = OmniCommandParser::parse(Rule::generic_command, arguments);
     match parsed {
         Ok(mut pairs) => {
@@ -98,12 +119,19 @@ fn get_noun(arguments: &str) -> Result<String> {
 
 /// Handle all ADD commands, although mostly that just involves figuring out what should be added and calling the correct function.
 fn handle_add_command<'a, 'message:'a>(discord_refs: &'a DiscordReferences<'message>, omnidata: &mut Omnidata, arguments: &str) -> Pin<Box<dyn Future<Output=Result<()>> + Send + 'a>> {
-    let noun = get_noun(arguments);
+    let noun = get_noun_from_command(arguments);
     if noun.is_err() {
         return Box::pin(discord_refs.send_message_reply("Failed to parse command. Remember the add command should follow the verb-noun-target syntax. For more help, consult `!help add`."));
     }
-    match get_noun(arguments).unwrap().as_str() {
+    match get_noun_from_command(arguments).unwrap().as_str() {
         "player" | "enemy" => add_character(discord_refs, omnidata, arguments),
+        "stat" => {
+            let char = match  get_character_from_command(omnidata, arguments) {
+                Ok(character) => character,
+                Err(error) => return Box::pin(discord_refs.send_message_reply(error.to_string())),
+            };
+            char.add_stat(discord_refs, arguments)
+        }
         unknown => return Box::pin(discord_refs.send_message_reply(format!("Sorry, I don't know how to add a '{}'. For more help, consult `!help add`.", unknown))),
     }
 }
@@ -144,7 +172,7 @@ mod tests {
 
     #[test]
     fn noun_parser() {
-        assert_eq!(get_noun("player Plunk HP:30").unwrap(), "player");
-        assert_eq!(get_noun("enemy \"War Boss\" HP:30").unwrap(), "enemy");
+        assert_eq!(get_noun_from_command("player Plunk HP:30").unwrap(), "player");
+        assert_eq!(get_noun_from_command("enemy \"War Boss\" HP:30").unwrap(), "enemy");
     }
 }
