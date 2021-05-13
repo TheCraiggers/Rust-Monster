@@ -1,8 +1,15 @@
 WHITESPACE = _{ " " }
 
 word = @{ ("\"" ~ (ASCII_ALPHANUMERIC | " ")+ ~ "\"") | ASCII_ALPHANUMERIC+ }
+
 noun = @{ word }
 target = @{ word }
-properties = @{ word }
 
-add_character = { noun ~ target ~ properties* }
+stat_always_display = @{ "!" }
+stat_name = @{ word }
+stat_value = @{ word }
+stat_maximum_value = @{ word }
+stat = ${ stat_always_display? ~ stat_name ~ ":" ~ stat_value ~ ("/" ~ stat_maximum_value)? }
+
+add_character = { noun ~ target ~ stat* }
+add_stat = { noun ~ target ~ stat+ }
