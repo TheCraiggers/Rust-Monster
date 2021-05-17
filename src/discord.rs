@@ -46,9 +46,9 @@ impl DiscordReferences<'_> {
     /// Sends a private DM to the user containing help about a bot command or keyword
     pub async fn dm_help_message(&self, help_word: &Word<'_>) -> Result<()> {
         let embed = EmbedBuilder::new()
-            .title(help_word.embed_title())?
-            .description(help_word.long_help)?
-            .field(EmbedFieldBuilder::new("Usage examples", help_word.usage_examples)?.inline())
+            .title(help_word.embed_title())
+            .description(help_word.long_help)
+            .field(EmbedFieldBuilder::new("Usage examples", help_word.usage_examples).inline())
             .build()?;
         
         let private_channel = self.http.create_private_channel(self.msg.author.id).await?;
